@@ -143,6 +143,45 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorBodyDTO'
 
+  /v1/nodes/{node_id}/forensics:
+    get:
+      summary: Forensic View of a Non-Healthy Node
+      description: Last snapshot, degradation timeline, frozen log tail (at most 50 lines) and last job of a node that left HEALTHY.
+      operationId: getNodeForensics
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^(ws-gpu-(0[1-9]|[12][0-9]|3[01])|server-gpu-01)$'
+          example: ws-gpu-22
+      responses:
+        '200':
+          description: Forensic record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeForensicsDTO'
+        '404':
+          description: Node id outside the 32 registered nodes (ERR_UNKNOWN_NODE_ID).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDTO'
+        '409':
+          description: Node is HEALTHY (ERR_NODE_HEALTHY).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDTO'
+        '503':
+          description: Storage engine unavailable (ERR_DATABASE_UNAVAILABLE).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDTO'
+
 components:
   schemas:
     NodeTelemetryPacketDTO:
@@ -357,6 +396,7 @@ components:
         - summary
         - by_subject
         - node_aggregates
+        - peak_contention_windows
         - is_empty
         - explanation
       properties:
@@ -390,8 +430,86 @@ components:
           type: array
           items:
             type: object
+        peak_contention_windows:
+          type: array
+          maxItems: 168
+          items:
+            type: object
+            required: [hour_start_ms, utilization_pct]
+            properties:
+              hour_start_ms: { type: integer }
+              utilization_pct: { type: number, minimum: 99.9, maximum: 100 }
         is_empty:
           type: boolean
+        explanation:
+          $ref: '#/components/schemas/ExplanationDTO'
+
+    FleetSnapshotDTO:
+      description: Payload of the server-to-client event ui.fleet.snapshot (WebSocket), at most 4 per second.
+      type: object
+      required: [bucket_start_ms, cells, storm_mode, dropped_total]
+      properties:
+        bucket_start_ms: { type: integer }
+        storm_mode: { type: boolean }
+        dropped_total: { type: integer, minimum: 0 }
+        cells:
+          type: array
+          maxItems: 33
+          items:
+            type: object
+            required: [node_id, gpu_index, state, freshness, temperature_celsius, vram_used_bytes, vram_total_bytes, gpu_utilization_pct]
+            properties:
+              node_id: { type: string, pattern: '^(ws-gpu-(0[1-9]|[12][0-9]|3[01])|server-gpu-01)$' }
+              gpu_index: { type: integer, enum: [0, 1] }
+              state: { type: string, enum: [HEALTHY, STALE, SILENT_TIMEOUT, RECOVERING, CORDONED] }
+              freshness: { type: string, enum: [LIVE, STALE_CACHED] }
+              temperature_celsius: { type: number }
+              vram_used_bytes: { type: integer }
+              vram_total_bytes: { type: integer }
+              gpu_utilization_pct: { type: number }
+
+    NodeForensicsDTO:
+      type: object
+      required: [node_id, state, silence_duration_ms, last_snapshot, degradation_timeline, log_tail, last_job, recommendation, explanation]
+      properties:
+        node_id:
+          type: string
+          pattern: '^(ws-gpu-(0[1-9]|[12][0-9]|3[01])|server-gpu-01)$'
+        state:
+          type: string
+          enum: [STALE, SILENT_TIMEOUT, RECOVERING, CORDONED]
+        silence_duration_ms: { type: integer, minimum: 0 }
+        last_snapshot:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/NodeTelemetryPacketDTO'
+        degradation_timeline:
+          type: array
+          maxItems: 1200
+          items:
+            type: object
+            required: [timestamp_ms, temperature_celsius, vram_used_bytes]
+            properties:
+              timestamp_ms: { type: integer }
+              temperature_celsius: { type: number }
+              vram_used_bytes: { type: integer }
+        log_tail:
+          type: array
+          maxItems: 50
+          items: { type: string }
+        last_job:
+          type: object
+          nullable: true
+          required: [job_id, user, subject, model, submitted_at_ms]
+          properties:
+            job_id: { type: string }
+            user: { type: string }
+            subject: { type: string }
+            model: { type: string }
+            submitted_at_ms: { type: integer }
+        recommendation:
+          type: string
+          enum: [CORDON_RECOMMENDED, NONE]
         explanation:
           $ref: '#/components/schemas/ExplanationDTO'
 
@@ -435,6 +553,8 @@ components:
             - ERR_INVALID_DATE_RANGE
             - ERR_FUTURE_REPORT_QUERY
             - ERR_INVALID_ACADEMIC_SUBJECT
+            - ERR_UNKNOWN_NODE_ID
+            - ERR_NODE_HEALTHY
             - ERR_DATABASE_UNAVAILABLE
           example: ERR_INVALID_TELEMETRY_PAYLOAD
         http_status:

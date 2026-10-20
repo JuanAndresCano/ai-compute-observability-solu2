@@ -128,6 +128,10 @@ All events ingested or emitted by Module 11 adhere to this immutable envelope st
 }
 ```
 
+### 3.1b `ui.fleet.snapshot` (Emitted, server -> client, at most 4 per second)
+* **Emitter:** `BucketDecimator` through `UiDispatchPort` when a 250 ms window closes (contracts.md Op1 Q2c).
+* **Schema Definition:** `payload` is a `FleetSnapshotDTO` (`dto.ts` section 2b): `bucket_start_ms`, 33 `cells` (`node_id`, `gpu_index`, `state`, `freshness` = `LIVE` | `STALE_CACHED`, `temperature_celsius`, `vram_used_bytes`, `vram_total_bytes`, `gpu_utilization_pct`), `storm_mode`, `dropped_total`.
+
 ### 3.2 `alert.anomaly.triggered` (Emitted)
 * **Emitter:** `AnomalyDetectionEngine` upon detecting $10\times$ token surge and $P_{99} > 8.0\text{ s}$.
 * **Delivery:** Bypasses 4 Hz decimation; dispatches via SSE/WebSocket immediately.

@@ -1,78 +1,97 @@
-# Implementation Readiness Gate Report
-## Module 11: AI Infrastructure Observability Console
-**Date of Audit:** 2026-10-19  
-**Quality Lead / Lead Auditor:** Murat (BMad Test Architect) & Juand (Lead Human Engineer)  
-**Gate Result:** **PASS (Certified 100% Implementation Ready)**
+# Implementation Readiness Gate Report - Solu-2, Module 11
 
----
+**Date:** 2026-10-26 · **Auditor:** Partner B (Test Lead) with Claude Code in the roles of John (PM) and Amelia (Dev) · **Scope:** `planning/epics.md` (4 epics, 16 stories) against `prd.md`, `ARCHITECTURE.md`, `contracts.md` v1.2, `schemas/`, `ux/`, `test/`.
+*The Plan-2 gate that came with the handover (PASS, 2026-10-19, signed by Juand and Liam) is kept as `reviews/plan2-readiness-gate-report.md`. It judged the Plan-2 package, not this unit.*
 
-## 1. Executive Gate Summary
+## 1. Verdict
 
-The Pre-Implementation Quality Gate for **Module 11: AI Infrastructure Observability Console** was executed on 2026-10-19 across all four finalized planning packages:
-1. **Product Requirements Document:** `planning/prd.md`
-2. **User Experience & Scenarios:** `ux/DESIGN.md`, `ux/EXPERIENCE.md`, `ux/C-UX-Scenarios/*` (Scenarios 1–4 + Index)
-3. **Technical Architecture & Invariants:** `planning/ARCHITECTURE.md` (AD-01 through AD-08)
-4. **Specialized Review Reports:** All 4 adversarial and edge-case review reports in `reviews/`
+# CONCERNS
 
-### Audit Outcome:
-* **Total Requirements Verified:** 5 Functional Requirements (`FR-01` to `FR-05`) + 8 Non-Functional Requirements (`NFR-01` to `NFR-08`).
-* **Architectural Invariants Verified:** 8 Invariants (`AD-01` to `AD-08`) with 100% compliance with the mandatory 5-part structure and zero elastic words.
-* **Review Findings Triaged:** 22 total findings across 4 reviews ($100\%$ resolved: 15 Accepted & incorporated, 7 Rejected with human engineering rationale, 0 Deferred blockers).
-* **Final Gate Status:** **PASS**
+**One line:** the plan is mechanically implementable as recorded (no orphan, no forward dependency, every test owned by one story, DDL/DTO/OpenAPI executable) but **three decisions are not yet confirmed by a human**, so it cannot honestly be called PASS today. Each concern below has a mitigation and an exact step that turns it into PASS. Proceeding to sprint planning is documented, not silent.
 
----
+| # | Concern | Why it matters | Mitigation now | Step to PASS | Owner |
+|:-:|---|---|---|---|:-:|
+| **C-1** | **AMD-14** (alarm baseline excludes the short window) is applied but not confirmed (DEC-14 PENDING). PRD FR-02 says "prior 300 seconds", which can also be read as the 300 s before the 30 s window. | If rejected or changed, Story 3.1 formulas and 3 test builders change (`breachWindow`, `calmWindow`, `ratioWindow`). | Story 3.1 starts only after the confirmation (its DoD says so); builders are isolated in one file. | Both partners record ACCEPT/MODIFY in DEC-14; update status; re-run this report. | Partner B + A |
+| **C-2** | **AMD-15..20** and the PRD alignments REV-DET-17..19 were applied by the AI inside Partner B's instruction to move fast, without a per-item answer (DEC-16 PENDING REVIEW). | They add Operation 4, `FleetSnapshotDTO`, `ingested_batches` and 6 other contract clauses; a reviewer may disagree with a choice. | Every change is listed in `reviews/review-detailed-design.md` section 6.3 with its fix, and was verified (DDL executed, `tsc --strict`, OpenAPI parsed, new red and green tests). | Partner B reviews `git diff` for AMD-15..20; Partner A confirms. | Partner B + A |
+| **C-3** | **Reviews and sign-offs still open:** Partner B approvals of the Phase 0 and Phase 1-2 reviews are PENDING by design; the independent re-review of the test suite (TQ-A) is open; the `bmad-testarch-*` skills were not run from this repository (see `test/tea-skill-matrix.md`). | Rubric items on independent verification and skill use. | Stated openly in each artifact. | Partner A re-reviews `reviews/review-test-quality.md`; run the TEA skills from a session opened in `task-first-solution/` if required. | Partner A |
 
-## 2. Requirement Traceability Matrix (Cross-Artifact Alignment)
+**Architect sign-off required for CONCERNS:** *Partner A (Juand - Architect Lead): [PENDING]* · *Partner B (Test Lead): [PENDING]*.
 
-Every mandatory scenario and edge case defined in the Task Statement Annex is rigorously traced across all deliverables:
+## 2. The six audit checks (workshop 4.2)
 
-| Requirement / Scenario | PRD Binding | UX Surface & Scenario | Architecture Component | Architectural Invariant | Quality Verification Status |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Scenario 1: Real-Time Telemetry Stream** (32 nodes heatmap, temp & VRAM) | `FR-01`, `NFR-01`, `NFR-02` | `ux/C-UX-Scenarios/scenario-1.md`, `wireframe-telemetry-heatmap.md` | `telemetry-worker.js`, `TelemetryRingBuffer`, `CanvasHeatmap` | `AD-01`, `AD-02`, `AD-08` | **VERIFIED PASS** (Dual-GPU server explicitly mapped; 4 Hz render tick). |
-| **Scenario 2: Token Spike & Latency Alert** ($10\times$ spike, $P_{99} > 8\text{ s}$) | `FR-02`, `NFR-03` | `ux/C-UX-Scenarios/scenario-2.md`, `EXPERIENCE.md` Section 3.1 | `AnomalyDetectionEngine`, `AlertDispatcher` | `AD-03`, `AD-05` | **VERIFIED PASS** (Dual window 30s/300s, T-Digest P99, persistent non-blocking banner). |
-| **Scenario 3: Unhealthy Node Drill-Down** (`ws-gpu-22` heartbeat loss) | `FR-03`, `NFR-04` | `ux/C-UX-Scenarios/scenario-3.md`, `wireframe-node-drilldown.md` | `NodeHeartbeatWatchdog`, `ForensicInspectorDrawer` | `AD-04` | **VERIFIED PASS** (15.0s timeout watchdog, last 50 stderr logs, state hysteresis). |
-| **Scenario 4: Executive Utilization Reporting** (7-day summary) | `FR-04`, `NFR-06` | `ux/C-UX-Scenarios/scenario-4.md`, `EXPERIENCE.md` Section 2.1 | `ExecutiveReportService`, `LocalRollupRepository` | `AD-06`, `AD-07` | **VERIFIED PASS** (168 hourly rollups, zero raw log scans, compute time $\le 1.5\text{ s}$). |
-| **Mandatory Edge Case: Metric Collection Storm** ($5,000\text{ ev/s}$ flood) | `FR-05`, `NFR-01`, `NFR-05` | `ux/C-UX-Scenarios/scenario-1.md`, `DESIGN.md` | Web Worker decimation queue ($250\text{ ms}$ buckets) | `AD-01`, `AD-02` | **VERIFIED PASS** (Zero DOM lockup, memory heap cap $\le 128\text{ MB}$). |
+| # | Check | Result | Evidence |
+|:-:|---|:-:|---|
+| 1 | Every FR/NFR traces forward to >= 1 story; every story traces back to a requirement | **PASS** | `readiness-check`: 5 FR + 8 NFR traced, 0 forward or backward orphan. Matrix `test/traceability-matrix.md` has 46 rows; 2 documented GAP rows are UI-only NFRs (NFR-02, NFR-07) covered by story DoD and `nfr-evidence.md`. |
+| 2 | Every UX screen state (Loading / Empty / Error / Success / Denied) has a backing contract + DTO | **PASS with note** | Map in `epics.md`: 4 surfaces x 4 states, each tied to a DTO or typed error. *Denied is not applicable:* SSO is mocked and the PRD defines no role-gating, so there is no contract to back it (accepted scope boundary). |
+| 3 | Every AD-n appears in >= 1 story's Binding invariants and has a red test | **PASS** | `readiness-check`: AD-01..AD-08 each bound; matrix lists red or guarding tests for every AD-n; `npm run test:atdd:guard` 153/153 red for the right reason. |
+| 4 | No epic depends on a later epic; no story on a later story | **PASS** | `readiness-check` compares the order of every "Depends on" id: 0 forward dependencies. Three tests were placed in later stories during authoring to remove forward dependencies: `C1-EDGE-c` to 3.2, `C1-Q5c` to 3.4, `X-AD07` to 4.3. |
+| 5 | Artifacts do not contradict each other | **PASS after 10 fixes; 1 open point** | 10 contradictions found and fixed (REV-DET-17..26: temperature range, PRD input names and outputs, missing peak window, missing forensic contract, missing heatmap DTO, batch id store, hour units, uncomputable DTO fields, two node-state sources, 1,000 ms vs 5,000 ms). Open: C-1 wording of the FR-02 baseline. Numeric NFRs (250/500 ms, 1.0 s, 15.0 +/- 0.5 s, 128 MB, 1,500 ms) are identical in PRD, epics and contracts. |
+| 6 | Every earlier review finding is triaged and, if Accepted, visibly fixed | **PASS with 3 open items** | Plan-2 reviews: 22 findings, 15 Accepted and fixed, 7 Rejected with rationale (`reviews/plan2-readiness-gate-report.md` section 3). Phase 0: 8 gaps, all Accepted, all resolved. Detailed design: REV-DET-01..26, all Accepted and fixed except REV-DET-16 (AMD-14, C-1). Test quality: 14 findings - 3 fixed (TQ-1, 5, 7), 1 partly fixed and deferred (TQ-2), 5 accepted with a documented limit or assumption (TQ-3, 4, 6, 10, 13), 2 deferred (TQ-11, 12), 2 rejected (TQ-8, 9), 1 limit stated (TQ-14) - plus TQ-A open (C-3). |
 
----
+## 3. Terminal output (verbatim)
 
-## 3. Review Findings & Blocker Resolution Log
+### 3.1 Skill script - `bmad-sprint-planning` (`sprint_plan.py`)
+```text
+$ python3 sprint_plan.py generate --epic-file planning/epics.md --status-file implementation-artifacts/sprint-status.yaml --stories-dir implementation-artifacts --project "Module 11 - AI Infrastructure Observability Console" --date "10-26-2026 12:00"
+{"ok": true, "action": "generate", "status_file": "implementation-artifacts/sprint-status.yaml", "dry_run": false, "fresh": false, "epics": 4, "stories": 16, "counts": {"backlog": 20, "optional": 4}, "generated": "10-26-2026 12:00", "last_updated": "10-26-2026 12:00", "warnings": [], "new_entries": "[0]", "preserved": 24, "changed": 0, "upgraded_from_disk": [], "dropped_orphans": [], "legacy_mapped": [], "illegal": [], "in_sync": true, "explicit_set": []}
+$ python3 sprint_plan.py validate --status-file implementation-artifacts/sprint-status.yaml
+{"ok": true, "action": "validate", "status_file": "implementation-artifacts/sprint-status.yaml", "valid": true, "problems": [], "legacy_mapped": []}
+```
+First run created 24 entries (4 epics, 16 stories, 4 retrospectives); the run shown is the second, which proves idempotence (`new_entries: 0`, `preserved: 24`, `in_sync: true`). The script ran with `ruamel.yaml 0.18.6` loaded from a local wheel because `uv` is not installed here.
 
-All 4 specialized review reports were audited to verify that no untriaged findings remain:
+### 3.2 Readiness check (mechanical part of the audit)
+```text
+$ npm run readiness:check
 
-| Review Report | Target Artifact | Total Findings | Accepted & Fixed | Rejected (Justified) | Deferred | Blocker Count |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `review-prd-adversarial.md` | `planning/prd.md` | 6 | 4 | 2 | 0 | **0 Blockers** |
-| `review-ux-edge-cases.md` | `ux/` (Design & Scenarios) | 5 | 3 | 2 | 0 | **0 Blockers** |
-| `review-arch-adversarial.md` | `planning/ARCHITECTURE.md` | 6 | 4 | 2 | 0 | **0 Blockers** |
-| `review-arch-edge-cases.md` | `planning/ARCHITECTURE.md` | 5 | 4 | 1 | 0 | **0 Blockers** |
-| **TOTAL** | — | **22** | **15** | **7** | **0** | **0 Blockers** |
+4 epics, 16 stories; 5 FR + 8 NFR traced; 131 tests each owned by exactly one story
+  Epic 1: 1.1, 1.2, 1.3, 1.4 - Liam sees the live fleet (walking skeleton)
+  Epic 2: 2.1, 2.2, 2.3, 2.4 - Liam survives the 5,000 events-per-second storm (Mandatory Edge Case)
+  Epic 3: 3.1, 3.2, 3.3, 3.4, 3.5 - Liam is alerted before the lab class fails
+  Epic 4: 4.1, 4.2, 4.3 - Department Management receives audited numbers
+READINESS CHECK: no structural problem found
+```
 
-### Key Blocker Resolutions Verified:
-1. **GC Thrashing under 5,000 ev/s:** Resolved in `AD-01` and `AD-02` by enforcing Transferable ArrayBuffers and pre-allocated `Float32Array` ring buffers.
-2. **Blocking Modal during Outage:** Resolved in `AD-05` and `scenario-2.md` by replacing center modals with a non-blocking header banner and slide-over drawer.
-3. **Flapping Node Oscillation on `ws-gpu-22`:** Resolved in `AD-04` through 3-interval hysteresis state transitions.
-4. **Cold-Start Zero-Division False Alarms:** Resolved in `AD-03` via minimum sample quorum ($N \ge 50$).
-5. **External Database Dependency Violation:** Resolved in `AD-07` by replacing cloud Prometheus/TimescaleDB with local JSON fixtures and in-memory stores.
+### 3.3 Whole quality gate
+```text
+$ npm run ci
+ ✓ test/harness/fixtures.test.ts  (36 tests) 222ms
+ ✓ test/schema/schema.contract.test.ts  (34 tests) 91ms
+ ✓ test/architecture/purity.test.ts  (46 tests) 14ms
+      Tests  116 passed (116)
+46 matrix rows, 131 test ids traced, 131 tags in code, 2 documented GAP rows, 8 bound invariant tests
+4 epics, 16 stories; 5 FR + 8 NFR traced; 131 tests each owned by exactly one story
+  Epic 1: 1.1, 1.2, 1.3, 1.4 - Liam sees the live fleet (walking skeleton)
+  Epic 2: 2.1, 2.2, 2.3, 2.4 - Liam survives the 5,000 events-per-second storm (Mandatory Edge Case)
+  Epic 3: 3.1, 3.2, 3.3, 3.4, 3.5 - Liam is alerted before the lab class fails
+  Epic 4: 4.1, 4.2, 4.3 - Department Management receives audited numbers
+READINESS CHECK: no structural problem found
+153 ATDD cases - 153 red for the right reason, 0 red for another reason, 0 not red (passed/skipped/todo)
+```
 
----
+## 4. Gate drill (Step 4.3)
 
-## 4. Architectural Invariant Audit & Zero Elastic Words Verification
+| # | Link broken on purpose | What the control reported | Skill / action that fixed it | Time |
+|:-:|---|---|---|:-:|
+| 1 | Deleted the `Binding invariants` line of Story 2.2 | `Story 2.2: missing field "Binding invariants"` (1 problem). The skill script `sprint_plan.py` reported `in_sync: true` and no warning: it checks headings and statuses, not story content. | Restored the line following the field list of `bmad-create-epics-and-stories` (done by hand; skill not loadable here). Re-run: no problem. | 0.4 s of tool time |
+| 2 | Renamed `FleetCellDTO` to `FleetCellDto` in Story 3.4 only | **NOT detected on the first try** (the pattern looked for tokens ending in `DTO`). *The drill exposed a rubber-stamp hole.* After widening the pattern: `Story 3.4: DTO/type "FleetCellDto" does not exist in dto.ts`. | Pattern fixed in `test/ci/readiness-check.mjs` (DEC-17), name restored; re-run: no problem. `epics.md` verified byte-identical to the good copy. | 0.2 s of tool time |
 
-All 8 Invariants (`AD-01` to `AD-08`) were scanned for ambiguous elastic language. Results:
-* **Prohibited Words Scanned:** *"efficiently"*, *"appropriately"*, *"securely"*, *"fast"*, *"scalable"*, *"optimal"*.
-* **Occurrences in Invariant Rules:** **0 (Zero)**.
-* **Form & Structure:** 100% of invariants strictly implement `Status`, `Binds`, `Prevents`, `Rule`, and `Trade-off`.
+Honest scale note: the times are tool times for a script run and a text restore, not human fix times.
 
----
+## 5. Not blocking, recorded
 
-## 5. Formal Sign-Off Block
+* **Assumptions the tests make** (confirm with Partner A): the 250 ms window closes when the next batch arrives (TG-13); `NodeHeartbeatWatchdog.check()` output when several states are crossed in one call (TG-8); `Retry-After` and WebSocket close 1008 are asserted at the API level, in Story 2.2's DoD (TG-7).
+* **UI evidence is planned, not produced:** NFR-02 and NFR-07 (`nfr-evidence.md` N-02, N-07).
+* **No production logic was written** (Stop-Point Rule): `src/` holds interface stubs that throw `NotImplementedError`, ports, and test doubles.
 
-| Role | Name | Signature / Sign-Off Date | Decision |
-| :--- | :--- | :--- | :--- |
-| **Lead Human Engineer & Product Owner** | **Juand** | `SIGNED — 2026-10-19` | **PASS** |
-| **Lead Cloud & Systems Engineer** | **Liam** | `SIGNED — 2026-10-19` | **PASS** |
-| **System Architect** | **Winston (BMad Architect)** | `CERTIFIED — 2026-10-19` | **PASS** |
-| **Test Architect & Quality Auditor** | **Murat (BMad TEA)** | `VERIFIED — 2026-10-19` | **PASS** |
+## 6. How this becomes PASS
 
-> **Final Certification:** Module 11 (AI Infrastructure Observability Console) has met every pre-implementation quality gate criterion without deviation or unresolved blockers. The planning package is certified 100% ready for implementation.
+1. Partner B and Partner A set DEC-14 and DEC-16 to ACCEPT/MODIFY (C-1, C-2).
+2. Partner A re-reviews `reviews/review-test-quality.md` (TQ-A) and signs (C-3).
+3. Re-run `npm run ci` and `sprint_plan.py generate/validate`; paste the output in section 3; change section 1 to PASS.
+
+## 7. Sign-off
+
+| Role | Name | Decision | Date |
+|---|---|:-:|---|
+| Architect Lead | Partner A (Juand) | PENDING | - |
+| Test Lead | Partner B | PENDING | - |

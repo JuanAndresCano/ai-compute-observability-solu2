@@ -41,6 +41,17 @@ Every functional file within Module 11 belongs to exactly one Hexagonal layer an
 | `composition.ts` | **Composition Root (wiring only)** | All layers; contains no decisions | Hard rules R1-R5 |
 | `domain/models/fleet.ts` | **Core Domain (static data)** | nothing | **AD-08** (33 GPU series) |
 | `adapters/sim/sequential-id-generator.ts` | **Driven Adapter (Test Double)** | `IdGeneratorPort` | GAP-07 |
+| `api/routes/nodes-http.ts` | **Driving Adapter (HTTP REST)** | Inbound Port only (`ForensicsPort`), Fastify framework | **AD-04**, `getNodeForensics` |
+| `ports/in/forensics.port.ts` | **Inbound Port** | Primitive DTOs only (`NodeForensicsDTO`) | **AD-04**, Contract Op 4 |
+| `ports/in/monitoring.port.ts` | **Inbound Port** | Primitive types only | **AD-04**, AMD-17 (`tick()` every 1,000 ms) |
+| `application/services/forensics.service.ts` | **Application Service (implements `ForensicsPort`)** | Outbound ports, domain | **AD-04**, Contract Op 4 |
+| `application/services/node-monitor.service.ts` | **Application Service (implements `MonitoringPort`)** | `NodeHeartbeatWatchdog`, outbound ports | **AD-04**, Op 4 capture clause |
+| `ports/out/node-log.port.ts` | **Outbound Port** | Primitive types | **AD-04**, **AD-07** (simulated stderr) |
+| `ports/out/job-registry.port.ts` | **Outbound Port** | `ForensicJobDTO` | **AD-04**, **AD-07** (simulated scheduler registry) |
+| `ports/out/forensics-repository.port.ts` | **Outbound Port** | Primitive records | **AD-04**, `node_forensics` |
+| `adapters/db/sqlite-forensics-repo.ts` | **Driven Adapter (Persistence)** | `ForensicsRepositoryPort`, `better-sqlite3` driver | **AD-04**, `001_schema.sql` |
+| `adapters/sim/sim-node-log.ts` | **Driven Adapter (Test Double)** | `NodeLogPort` | **AD-07** |
+| `adapters/sim/sim-job-registry.ts` | **Driven Adapter (Test Double)** | `JobRegistryPort` | **AD-07** |
 | `adapters/db/sqlite-telemetry-repo.ts` | **Driven Adapter (Persistence)** | `TelemetryRepositoryPort`, `better-sqlite3` driver | **AD-01, AD-08**, `001_schema.sql` |
 | `adapters/db/sqlite-alert-repo.ts` | **Driven Adapter (Persistence)** | `AlertRepositoryPort`, `better-sqlite3` driver | **AD-03, AD-05**, `001_schema.sql` |
 | `adapters/db/sqlite-rollup-repo.ts` | **Driven Adapter (Persistence)** | `RollupRepositoryPort`, `better-sqlite3` driver | **AD-06**, `001_schema.sql` |
