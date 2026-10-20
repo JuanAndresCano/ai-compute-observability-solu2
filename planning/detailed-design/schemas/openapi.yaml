@@ -1,0 +1,364 @@
+openapi: 3.0.3
+info:
+  title: AI Infrastructure Observability Console API (Module 11)
+  description: >
+    Machine-enforceable HTTP/SSE contract-driven interface for cluster telemetry ingestion,
+    anomaly detection evaluation, and 7-day executive utilization reporting.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Standalone Local / Docker Compose Environment
+
+paths:
+  /v1/telemetry/batches:
+    post:
+      summary: Ingest High-Frequency Telemetry Batch
+      description: Ingests a batch of telemetry events (up to 5,000 ev/s burst), decimates into 250ms buckets, and commits to ring buffer.
+      operationId: ingestMetricBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MetricBatchDTO'
+      responses:
+        '200':
+          description: Batch successfully ingested and aggregated into active decimation bucket.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestionResultDTO'
+        '400':
+          description: Client timestamp clock drift exceeds 5000ms.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDTO'
+        '422':
+          description: Telemetry metric value violates physical range constraints.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDTO'
+        '429':
+          description: Ingestion queue saturated (>10,000 raw events). Client must back off.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                example: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDTO'
+
+  /v1/alerts/evaluate:
+    post:
+      summary: Evaluate Anomaly Rule Against Sliding Windows
+      description: Deterministically evaluates token throughput spike and P99 latency against sliding windows.
+      operationId: evaluateAlertRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRuleEvaluationRequestDTO'
+      responses:
+        '200':
+          description: Evaluation completed. Status reflects TRIGGERED, CLEARED, or SUPPRESSED_COLD_START.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertEvaluationDTO'
+        '412':
+          description: Cold-start condition; baseline window contains fewer than 50 completed samples.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDTO'
+        '422':
+          description: Invalid rule specification or unsupported window configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDTO'
+
+  /v1/reports/utilization:
+    get:
+      summary: Query 7-Day Executive Utilization Report
+      description: Returns pre-aggregated hourly metrics, token allocations by academic subject, and empty state explanation.
+      operationId: buildUtilizationReport
+      parameters:
+        - name: from_timestamp_ms
+          in: query
+          required: true
+          schema:
+            type: integer
+          example: 1791824400000
+        - name: to_timestamp_ms
+          in: query
+          required: true
+          schema:
+            type: integer
+          example: 1792429200000
+        - name: subjects
+          in: query
+          required: false
+          schema:
+            type: string
+          example: 'CS-480,CS-530'
+      responses:
+        '200':
+          description: Executive utilization report successfully generated from hourly rollups.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutiveReportDTO'
+        '400':
+          description: Inverted date range (from >= to) or window exceeds 168 hours.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDTO'
+        '422':
+          description: Query upper bound extends into the future relative to current server clock.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDTO'
+
+components:
+  schemas:
+    NodeTelemetryPacketDTO:
+      type: object
+      required:
+        - node_id
+        - gpu_index
+        - timestamp_ms
+        - temperature_celsius
+        - vram_used_bytes
+        - vram_total_bytes
+        - gpu_utilization_pct
+        - active_jobs_count
+        - current_subject
+      properties:
+        node_id:
+          type: string
+          pattern: '^(ws-gpu-[0-3][0-9]|server-gpu-01)$'
+          example: ws-gpu-05
+        gpu_index:
+          type: integer
+          enum: [0, 1]
+          example: 0
+        timestamp_ms:
+          type: integer
+          example: 1792429200000
+        temperature_celsius:
+          type: number
+          minimum: -20.0
+          maximum: 120.0
+          example: 64.2
+        vram_used_bytes:
+          type: integer
+          minimum: 0
+          example: 18253611008
+        vram_total_bytes:
+          type: integer
+          enum: [25769803776, 51539607552]
+          example: 25769803776
+        gpu_utilization_pct:
+          type: number
+          minimum: 0.0
+          maximum: 100.0
+          example: 85.0
+        active_jobs_count:
+          type: integer
+          minimum: 0
+          example: 2
+        current_subject:
+          type: string
+          enum: [CS-101, CS-480, CS-530, FAC-RES, IDLE]
+          example: CS-480
+
+    MetricBatchDTO:
+      type: object
+      required:
+        - batch_id
+        - client_timestamp_ms
+        - events
+      properties:
+        batch_id:
+          type: string
+          format: uuid
+        client_timestamp_ms:
+          type: integer
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeTelemetryPacketDTO'
+
+    IngestionResultDTO:
+      type: object
+      required:
+        - accepted_count
+        - dropped_count
+        - decimation_bucket_id
+        - ingested_at_ms
+        - explanation
+      properties:
+        accepted_count:
+          type: integer
+          example: 1250
+        dropped_count:
+          type: integer
+          example: 0
+        decimation_bucket_id:
+          type: string
+          example: BUCKET-ws-gpu-05-0-1792429200000
+        ingested_at_ms:
+          type: integer
+        explanation:
+          $ref: '#/components/schemas/ExplanationDTO'
+
+    AlertRuleEvaluationRequestDTO:
+      type: object
+      required:
+        - rule_id
+        - window
+      properties:
+        rule_id:
+          type: string
+          enum: [TOKEN_SPIKE_AND_LATENCY_BREACH, NODE_HEARTBEAT_TIMEOUT, THERMAL_CRITICAL_THRESHOLD]
+        window:
+          type: object
+          required:
+            - short_window_seconds
+            - long_window_seconds
+            - histogram_bucket_count
+          properties:
+            short_window_seconds:
+              type: integer
+              example: 30
+            long_window_seconds:
+              type: integer
+              example: 300
+            histogram_bucket_count:
+              type: integer
+              example: 100
+
+    AlertEvaluationDTO:
+      type: object
+      required:
+        - evaluation_id
+        - rule_id
+        - status
+        - evaluated_at_ms
+        - alert_payload
+        - explanation
+      properties:
+        evaluation_id:
+          type: string
+          format: uuid
+        rule_id:
+          type: string
+        status:
+          type: string
+          enum: [TRIGGERED, CLEARED, SUPPRESSED_COLD_START]
+        evaluated_at_ms:
+          type: integer
+        alert_payload:
+          type: object
+          nullable: true
+        explanation:
+          $ref: '#/components/schemas/ExplanationDTO'
+
+    ExecutiveReportDTO:
+      type: object
+      required:
+        - report_id
+        - generated_at_ms
+        - query_window
+        - summary
+        - by_subject
+        - node_aggregates
+        - is_empty
+        - explanation
+      properties:
+        report_id:
+          type: string
+          format: uuid
+        generated_at_ms:
+          type: integer
+        query_window:
+          type: object
+          required: [from_ms, to_ms, duration_hours]
+          properties:
+            from_ms: { type: integer }
+            to_ms: { type: integer }
+            duration_hours: { type: number }
+        summary:
+          type: object
+          required: [total_cluster_gpu_hours, utilized_gpu_hours, idle_gpu_hours, overall_utilization_pct, total_prompt_tokens, total_completion_tokens]
+          properties:
+            total_cluster_gpu_hours: { type: number }
+            utilized_gpu_hours: { type: number }
+            idle_gpu_hours: { type: number }
+            overall_utilization_pct: { type: number }
+            total_prompt_tokens: { type: integer }
+            total_completion_tokens: { type: integer }
+        by_subject:
+          type: object
+          additionalProperties: true
+        node_aggregates:
+          type: array
+          items:
+            type: object
+        is_empty:
+          type: boolean
+        explanation:
+          $ref: '#/components/schemas/ExplanationDTO'
+
+    ExplanationDTO:
+      type: object
+      required:
+        - rule_id
+        - observed_values
+        - thresholds
+        - justification_text
+      properties:
+        rule_id:
+          type: string
+        observed_values:
+          type: object
+        thresholds:
+          type: object
+        justification_text:
+          type: string
+        empty_state_reason:
+          type: string
+          nullable: true
+
+    ErrorBodyDTO:
+      type: object
+      required:
+        - error_code
+        - http_status
+        - message
+        - timestamp_ms
+        - retryable
+        - details
+      properties:
+        error_code:
+          type: string
+          example: ERR_INVALID_TELEMETRY_PAYLOAD
+        http_status:
+          type: integer
+          example: 422
+        message:
+          type: string
+        timestamp_ms:
+          type: integer
+        retryable:
+          type: boolean
+        details:
+          type: object
