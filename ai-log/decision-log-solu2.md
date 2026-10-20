@@ -18,7 +18,7 @@
 | **DEC-10** | Phase 1 (Contracts) | Anomaly Alert Deduplication & Error Representation | Use informal strings for exceptions and in-memory `Set` with `setTimeout` for alert debouncing. | **REJECTED AI PROPOSAL:** Mandated Typed Error Catalog, canonical HTTP/WS codes, and physical SQLite UNIQUE index on `incident_key` with hysteresis. | **ADOPTED** | **Partner A (Juand)** |
 | **DEC-11** | Phase 2 (Detailed Design) | Atomic Contention Serialization vs SELECT-then-UPDATE & DTO Decoupling | Pass Fastify request objects directly into ports and execute `SELECT then UPDATE` in application code. | **REJECTED AI PROPOSAL:** Enforced pure primitive DTOs in `dto.ts` and atomic SQLite partial unique index with `INSERT OR IGNORE`. | **ADOPTED** | **Partner A (Juand)** |
 
-| **DEC-12** | Phase 1–2 re-review (Partner B) | Defects in contracts/DDL/DTO found by the Test Lead; options chosen; sign-off governance | AI listed 9 defects with ≥2 options each and a recommendation | **ACCEPT 7 / MODIFY 1 / REJECT 1:** options chosen per item (see entry); item 4 challenged and re-analysed; pre-filled Partner B approvals rejected and reset to PENDING | **ADOPTED** | **Partner B** |
+| **DEC-12** | Phase 1–2 re-review (Partner B) | Defects in contracts/DDL/DTO found by the Test Lead; options chosen; sign-off governance | AI listed 9 defects with ≥2 options each and a recommendation | **ACCEPT 8 / MODIFY 1 / REJECT 1:** options chosen per item (see entry); item 4 challenged and re-analysed; pre-filled Partner B approvals rejected and reset to PENDING | **ADOPTED** | **Partner B** |
 
 *(Note: entries for Phase 3 and 4 (test strategy, ATDD, gate drill) continue from DEC-13 and are recorded by Partner B.)*
 
