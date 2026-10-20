@@ -174,6 +174,12 @@ describe('AD-01 / AD-02: telemetry bucket integrity', () => {
     insert(bucket({ id: 'B2', node: 'server-gpu-01', gpu: 1, tmin: 80, tmax: 81, tavg: 80 }));
     expect(db.prepare(`SELECT temperature_avg AS t FROM telemetry_buckets ORDER BY gpu_index`).all()).toEqual([{ t: 40 }, { t: 80 }]);
   });
+  it('[S-01f] a batch id registers once: INSERT OR IGNORE returns 1 row, then 0 (replay); ids must be 36 characters', () => {
+    const reg = (id: string) => db.prepare(`INSERT OR IGNORE INTO ingested_batches (batch_id, ingested_at_ms) VALUES (?, ?)`).run(id, T0).changes;
+    const uuid = '00000000-0000-4000-9000-000000000001';
+    expect([reg(uuid), reg(uuid)]).toEqual([1, 0]);
+    expect(() => db.prepare(`INSERT INTO ingested_batches VALUES ('short', ?)`).run(T0)).toThrow(/CHECK/);
+  });
   it.each([[-20.1, 55], [50, 120.1]])('[S-01d] rejects temperatures outside [-20, 120] (min=%s max=%s)', (tmin, tmax) => {
     expect(() => insert(bucket({ tmin, tmax }))).toThrow(/CHECK/);
   });
@@ -189,6 +195,21 @@ describe('AD-04: node heartbeat state machine guard', () => {
       db.prepare(`INSERT OR REPLACE INTO node_heartbeats VALUES ('ws-gpu-22', ?, ?, 0, 'SILENT_TIMEOUT', ?)`).run(T0, missed, T0);
     expect(() => ins(2)).toThrow(/CHECK/);
     expect(() => ins(3)).not.toThrow();
+  });
+  it('[S-04c] the preserved log tail holds at most 50 lines and must be a JSON array (Op4 I1)', () => {
+    const ins = (id: string, tail: string) =>
+      db.prepare(`INSERT INTO node_forensics (node_id, last_heartbeat_ms, log_tail_json, captured_at_ms, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?)`).run(id, T0, tail, T0, T0, T0);
+    expect(() => ins('ws-gpu-22', JSON.stringify(Array(50).fill('x')))).not.toThrow();
+    expect(() => ins('ws-gpu-21', JSON.stringify(Array(51).fill('x')))).toThrow(/CHECK/);
+    expect(() => ins('ws-gpu-20', 'not json')).toThrow(/CHECK/);
+    expect(() => ins('ws-gpu-32', '[]')).toThrow(/CHECK/);
+  });
+  it('[S-04d] a second capture for the same node is a no-op (ON CONFLICT (node_id) DO NOTHING)', () => {
+    const cap = (tail: string) =>
+      db.prepare(`INSERT INTO node_forensics (node_id, last_heartbeat_ms, log_tail_json, captured_at_ms, created_at_ms, updated_at_ms) VALUES ('ws-gpu-22', ?, ?, ?, ?, ?) ON CONFLICT (node_id) DO NOTHING`).run(T0, tail, T0, T0, T0).changes;
+    expect(cap('["first"]')).toBe(1);
+    expect(cap('["second"]')).toBe(0);
+    expect(db.prepare(`SELECT log_tail_json AS t FROM node_forensics`).get()).toEqual({ t: '["first"]' });
   });
   it('[S-04b] rejects an unknown state name', () => {
     expect(() => db.prepare(`INSERT INTO node_heartbeats VALUES ('ws-gpu-22', ?, 0, 0, 'ASLEEP', ?)`).run(T0, T0)).toThrow(/CHECK/);

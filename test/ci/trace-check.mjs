@@ -7,12 +7,12 @@ const root = resolve(new URL('../..', import.meta.url).pathname);
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const matrix = read('test/traceability-matrix.md');
 
-const TAG = /\[((?:C[123]-|W-|X-|D-|S-)[A-Za-z0-9-]+|A-R\d)\]/g;
+const TAG = /\[((?:C[1-4]-|W-|X-|D-|S-)[A-Za-z0-9-]+|A-R\d)\]/g;
 const sources = ['test/atdd/observability_contracts.test.ts', 'test/schema/schema.contract.test.ts', 'test/architecture/purity.test.ts'];
 const testSrc = sources.map(read).join('\n');
 const inCode = new Set([...testSrc.matchAll(TAG)].map((m) => m[1]));
 
-const ID = /\b(?:C[123]-[A-Z0-9a-z]+(?:-[A-Za-z0-9]+)*|W-\d|X-AD07|D-[A-Z]+-[a-e]|S-\d\d[a-h]|A-R\d)\b/g;
+const ID = /\b(?:C[1-4]-[A-Z0-9a-z]+(?:-[A-Za-z0-9]+)*|W-\d|X-AD07|D-[A-Z]+-[a-e]|S-\d\d[a-h]|A-R\d)\b/g;
 const rows = matrix.split('\n').filter((l) => /^\|\s*(FR|NFR)/.test(l));
 const inMatrix = new Set();
 const problems = [];

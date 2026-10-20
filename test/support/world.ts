@@ -4,6 +4,9 @@ import { SequentialIdGenerator } from '../../src/adapters/sim/sequential-id-gene
 import { SqliteTelemetryRepo } from '../../src/adapters/db/sqlite-telemetry-repo';
 import { SqliteAlertRepo } from '../../src/adapters/db/sqlite-alert-repo';
 import { SqliteRollupRepo } from '../../src/adapters/db/sqlite-rollup-repo';
+import { SqliteForensicsRepo } from '../../src/adapters/db/sqlite-forensics-repo';
+import { SimNodeLog } from '../../src/adapters/sim/sim-node-log';
+import { SimJobRegistry } from '../../src/adapters/sim/sim-job-registry';
 import { newClock, FakeClock } from '../fixtures/fake_clock';
 import { createTestDb } from '../fixtures/db';
 import { SimulatedTelemetry } from '../fixtures/sim_telemetry';
@@ -16,6 +19,8 @@ export interface World {
   events: EventSpy;
   metrics: MetricsSpy;
   ui: UiSpy;
+  logs: SimNodeLog;
+  jobs: SimJobRegistry;
   deps: Deps;
   sut: System;
 }
@@ -27,6 +32,8 @@ export function createWorld(over: Partial<Deps> = {}, shared?: { db: Database; c
   const events = new EventSpy();
   const metrics = new MetricsSpy();
   const ui = new UiSpy();
+  const logs = new SimNodeLog();
+  const jobs = new SimJobRegistry();
   const deps: Deps = {
     clock,
     ids: new SequentialIdGenerator(),
@@ -36,7 +43,10 @@ export function createWorld(over: Partial<Deps> = {}, shared?: { db: Database; c
     alerts: new SqliteAlertRepo(db),
     rollups: new SqliteRollupRepo(db),
     ui,
+    logs,
+    jobs,
+    forensics: new SqliteForensicsRepo(db),
     ...over,
   };
-  return { clock, db, sim: new SimulatedTelemetry(), events, metrics, ui, deps, sut: createSystem(deps) };
+  return { clock, db, sim: new SimulatedTelemetry(), events, metrics, ui, logs, jobs, deps, sut: createSystem(deps) };
 }

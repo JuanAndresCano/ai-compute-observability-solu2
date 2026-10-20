@@ -27,6 +27,9 @@ import { HistogramP99 } from '../../src/domain/services/histogram-p99';
 import { AnomalyDetectionEngine } from '../../src/domain/services/anomaly-detector';
 import { NodeHeartbeatWatchdog } from '../../src/domain/services/heartbeat-watchdog';
 import type { AlertRuleDTO, MetricBatchDTO, ReportQueryDTO, SlidingWindowDTO } from '../../src/dto';
+import type { ForensicsRepositoryPort } from '../../src/ports/out/forensics-repository.port';
+import { SqliteForensicsRepo } from '../../src/adapters/db/sqlite-forensics-repo';
+import { StorageUnavailableError } from '../../src/shared/errors';
 
 const SERIES_IDS = GPU_SERIES.map((s) => `${s.node_id}:${s.gpu_index}`);
 const RING_BYTES = 33 * 6 * 7200 * 4; // 5,702,400
@@ -142,6 +145,54 @@ describe('Operation 1: ingestMetricBatch (contracts.md Op1)', () => {
       expect(win.short_histogram.reduce((a, b) => a + b, 0)).toBe(6);
       expect(win.short_window_prompt_tokens).toBe(600);
       expect(win.long_window_prompt_tokens).toBe(600);
+    });
+
+    it('[C1-Q5a] a closed window dispatches ONE snapshot with 33 cells: window averages, both GPUs of server-gpu-01, all LIVE (AMD-18)', async () => {
+      const w = createWorld();
+      const events = [
+        ...[40, 60].map((t) => w.sim.packet({ node_id: 'ws-gpu-05', timestamp_ms: T0, temperature_celsius: t, gpu_utilization_pct: t })),
+        w.sim.packet({ node_id: 'server-gpu-01', gpu_index: 0, timestamp_ms: T0, temperature_celsius: 40 }),
+        w.sim.packet({ node_id: 'server-gpu-01', gpu_index: 1, timestamp_ms: T0, temperature_celsius: 80 }),
+      ];
+      await w.sut.ingest.ingestMetricBatch(w.sim.batch(events.length, T0, { events }));
+      expect(w.ui.ticks, 'nothing is dispatched while the window is open').toHaveLength(0);
+      await flush(w);
+      expect(w.ui.ticks).toHaveLength(1);
+      const snap = w.ui.ticks[0]!;
+      expect(snap).toMatchObject({ bucket_start_ms: T0, storm_mode: false, dropped_total: 0 });
+      expect(snap.cells).toHaveLength(33);
+      expect(snap.cells.map((c) => `${c.node_id}:${c.gpu_index}`)).toEqual(GPU_SERIES.map((s) => `${s.node_id}:${s.gpu_index}`));
+      expect(snap.cells.every((c) => c.freshness === 'LIVE' && c.state === 'HEALTHY')).toBe(true);
+      expect(snap.cells.find((c) => c.node_id === 'ws-gpu-05')).toMatchObject({ temperature_celsius: 50, gpu_utilization_pct: 50, vram_total_bytes: WS_VRAM_BYTES });
+      expect(snap.cells.find((c) => c.node_id === 'server-gpu-01' && c.gpu_index === 1)).toMatchObject({ temperature_celsius: 80, vram_total_bytes: 51_539_607_552 });
+    });
+
+    it('[C1-Q5b] Storm Mode is on when > 1,000 events were accepted in the last second, off again after a quiet second; dropped_total accumulates', async () => {
+      const w = createWorld();
+      await w.sut.ingest.ingestMetricBatch(w.sim.stormSlice(T0));
+      w.clock.advanceBy(250);
+      await w.sut.ingest.ingestMetricBatch(w.sim.stormSlice(w.clock.nowMs()));
+      w.clock.advanceBy(250);
+      await w.sut.ingest.ingestMetricBatch(w.sim.batch(1, w.clock.nowMs())); // closes the 2nd storm window
+      expect(w.ui.ticks.at(-1)!.storm_mode).toBe(true);
+      w.clock.advanceBy(2000);
+      await w.sut.ingest.ingestMetricBatch(w.sim.batch(1, w.clock.nowMs())); // closes a window after 2 s of near silence
+      expect(w.ui.ticks.at(-1)!.storm_mode).toBe(false);
+      expect(w.ui.ticks.at(-1)!.dropped_total).toBe(0);
+    });
+
+    it('[C1-Q5c] a silent node shows as STALE_CACHED with its last known values and state STALE (UX heatmap error cell)', async () => {
+      const w = createWorld();
+      const all = (silent: string, t: number) => NODE_IDS.filter((n) => n !== silent).map((n) => w.sim.packet({ node_id: n, timestamp_ms: t }));
+      await w.sut.ingest.ingestMetricBatch(w.sim.batch(NODE_IDS.length, T0, { events: [...all(SILENT_NODE, T0), w.sim.packet({ node_id: SILENT_NODE, timestamp_ms: T0, temperature_celsius: 82.1 })] }));
+      for (let s = 1; s <= 6; s++) {
+        w.clock.advanceBy(1000);
+        await w.sut.ingest.ingestMetricBatch(w.sim.batch(NODE_IDS.length - 1, w.clock.nowMs(), { events: all(SILENT_NODE, w.clock.nowMs()) }));
+        await w.sut.monitor.tick();
+      }
+      const cell = w.ui.ticks.at(-1)!.cells.find((c) => c.node_id === SILENT_NODE)!;
+      expect(cell).toMatchObject({ state: 'STALE', freshness: 'STALE_CACHED', temperature_celsius: 82.1 });
+      expect(w.ui.ticks.at(-1)!.cells.filter((c) => c.freshness === 'STALE_CACHED')).toHaveLength(1);
     });
 
     it('[C1-Q3a] one telemetry.batch.ingested event is emitted and no drop is counted', async () => {
@@ -708,9 +759,25 @@ describe('Operation 3: buildUtilizationReport (contracts.md Op3)', () => {
         total_completion_tokens: 277_200,
       });
       expect(Object.fromEntries(Object.entries(r.by_subject).map(([k, v]) => [k, v.prompt_tokens]))).toEqual({ 'CS-101': 168_000, 'CS-480': 168_000, 'CS-530': 184_800, 'FAC-RES': 33_600 });
+      expect(Object.fromEntries(Object.entries(r.by_subject).map(([k, v]) => [k, v.allocated_gpu_hours]))).toEqual({ 'CS-101': 840, 'CS-480': 840, 'CS-530': 924, 'FAC-RES': 168 });
+      // share_pct = token share: (prompt + completion) of the subject / 831,600 total tokens
+      expect(r.by_subject['CS-101']!.share_pct).toBeCloseTo((252_000 / 831_600) * 100, 6);
+      expect(r.by_subject['CS-530']!.share_pct).toBeCloseTo((277_200 / 831_600) * 100, 6);
+      expect(r.by_subject['FAC-RES']!.share_pct).toBeCloseTo((50_400 / 831_600) * 100, 6);
+      expect(Object.values(r.by_subject).reduce((a, b) => a + b.share_pct, 0)).toBeCloseTo(100, 6);
       expect(r.node_aggregates).toHaveLength(33);
       expect(r.node_aggregates.find((n) => n.node_id === 'server-gpu-01' && n.gpu_index === 1)).toMatchObject({ gpu_hours_busy: 84, gpu_hours_idle: 84 });
       expect(r.is_empty).toBe(false);
+      expect(r.peak_contention_windows, 'a cluster that is 50 % busy every hour has no saturated hour').toEqual([]);
+    });
+
+    it('[C3-Q1c] hours with cluster utilization >= 99.9 % are listed as peak-contention windows, ascending (FR-04, AMD-15)', async () => {
+      const w = createWorld();
+      seedRollups(w.db, T0 / 1000, { hourBusy: { 100: 1, 10: 1, 11: 0.999, 12: 0.998 } });
+      const r = await w.sut.reports.buildUtilizationReport(reportQuery());
+      const hourStart = (h: number) => T0 - (168 - h) * HOUR_MS;
+      expect(r.peak_contention_windows.map((p) => p.hour_start_ms)).toEqual([hourStart(10), hourStart(11), hourStart(100)]);
+      expect(r.peak_contention_windows.map((p) => p.utilization_pct)).toEqual([expect.closeTo(100, 6), expect.closeTo(99.9, 6), expect.closeTo(100, 6)]);
     });
 
     it('[C3-Q1b] a subject filter restricts every total to that subject (CS-480 = ws-gpu-11..20 = 1,680 GPU-hours)', async () => {
@@ -756,6 +823,7 @@ describe('Operation 3: buildUtilizationReport (contracts.md Op3)', () => {
       expect(r.summary).toMatchObject({ total_cluster_gpu_hours: 0, utilized_gpu_hours: 0, overall_utilization_pct: 0, total_prompt_tokens: 0 });
       assertExplanation(r.explanation, { ruleId: 'AD-06-HOURLY-ROLLUPS', observed: { scanned_buckets_count: 0 } });
       expect(r.explanation.empty_state_reason).toBe('NO_WORKLOADS_FOUND_IN_WINDOW');
+      expect(r.peak_contention_windows).toEqual([]);
     });
 
     it('[C3-EMPTY-b] rows exist but nothing ran (busy 0, no tokens) -> is_empty with the same reason, and 5,544 GPU-hours still scanned', async () => {
@@ -856,6 +924,193 @@ describe('Operation 3: buildUtilizationReport (contracts.md Op3)', () => {
       const err = await expectContractError(w.sut.reports.buildUtilizationReport(reportQuery({ academic_subjects: ['CS-999'] })), { code: 'ERR_INVALID_ACADEMIC_SUBJECT', http: 400, retryable: false });
       expect(err.body.message).toContain('CS-999');
       expect(err.body.message).toContain('CS-101, CS-480, CS-530, FAC-RES, ALL');
+    });
+  });
+});
+
+// ================================================================================================================
+// OPERATION 4 - getNodeForensics (Scenario 3, FR-03)
+// ================================================================================================================
+describe('Operation 4: getNodeForensics (contracts.md Op4)', () => {
+  const JOB = { job_id: 'job-cs480-lora-run-84', user: 'student-mateo', subject: 'CS-480', model: 'Llama-3-8B-Instruct', submitted_at_ms: T0 - HOUR_MS };
+  const others = (w: World, silent: string, now: number) =>
+    NODE_IDS.filter((n) => n !== silent).map((n) => w.sim.packet({ node_id: n, timestamp_ms: now }));
+  const report = (w: World, events: ReturnType<typeof others>) =>
+    w.sut.ingest.ingestMetricBatch(w.sim.batch(events.length, w.clock.nowMs(), { events }));
+
+  /**
+   * ws-gpu-22 degrades for 10 s (60 -> 82.1 C, a frame every 250 ms), emits 80 log lines, then goes silent while the
+   * other 31 nodes keep reporting every second. `late-*` log lines are emitted AFTER the forensic capture.
+   * Returns the time of the last heartbeat of the silent node.
+   */
+  async function silentNodeScenario(w: World, silenceMs: number, silent = SILENT_NODE): Promise<number> {
+    for (let i = 0; i <= 40; i++) {
+      const now = w.clock.nowMs();
+      const temperature = Math.round((60 + (22.1 * i) / 40) * 10) / 10;
+      await report(w, [...others(w, silent, now), w.sim.packet({ node_id: silent, timestamp_ms: now, temperature_celsius: temperature })]);
+      if (i % 4 === 0) await w.sut.monitor.tick();
+      if (i < 40) w.clock.advanceBy(250);
+    }
+    const lastHeartbeat = w.clock.nowMs();
+    for (let l = 1; l <= 80; l++) w.logs.emit(silent, `l${String(l).padStart(2, '0')} Xid 62: GPU bus error; NVML communication lost`);
+    w.jobs.setJob(silent, JOB);
+    for (let t = 1000; t <= silenceMs; t += 1000) {
+      w.clock.advanceBy(1000);
+      await report(w, others(w, silent, w.clock.nowMs()));
+      await w.sut.monitor.tick();
+      if (t === 6000) for (let n = 1; n <= 30; n++) w.logs.emit(silent, `late-${n}`);
+    }
+    return lastHeartbeat;
+  }
+
+  describe('Happy path (Q holds)', () => {
+    it('[C4-Q1a] 18 s after the last heartbeat ws-gpu-22 is SILENT_TIMEOUT with its frozen snapshot, timeline, last 50 log lines and job', async () => {
+      const w = createWorld();
+      const lastHeartbeat = await silentNodeScenario(w, 18_000);
+      const f = await w.sut.forensics.getNodeForensics(SILENT_NODE);
+      expect(f).toMatchObject({ node_id: SILENT_NODE, state: 'SILENT_TIMEOUT', silence_duration_ms: 18_000, recommendation: 'CORDON_RECOMMENDED' });
+      expect(f.last_snapshot).toMatchObject({ node_id: SILENT_NODE, temperature_celsius: 82.1, timestamp_ms: lastHeartbeat });
+      expect(f.log_tail).toHaveLength(50);
+      expect(f.log_tail[0]).toMatch(/^l31 /); // the LAST 50 of the 80 lines emitted before the silence, oldest first
+      expect(f.log_tail[49]).toMatch(/^l80 /);
+      expect(f.log_tail.some((line) => line.startsWith('late-')), 'lines emitted after the capture must not appear').toBe(false);
+      expect(f.last_job).toEqual(JOB);
+      expect(f.degradation_timeline.length).toBeGreaterThan(5);
+      expect(f.degradation_timeline.at(-1)!.temperature_celsius).toBeGreaterThan(f.degradation_timeline[0]!.temperature_celsius);
+    });
+
+    it('[C4-Q1b] a node silent for only 7 s is STALE: forensics available, no cordon recommendation', async () => {
+      const w = createWorld();
+      await silentNodeScenario(w, 7000);
+      const f = await w.sut.forensics.getNodeForensics(SILENT_NODE);
+      expect(f).toMatchObject({ state: 'STALE', silence_duration_ms: 7000, recommendation: 'NONE' });
+      expect(f.log_tail).toHaveLength(50);
+    });
+
+    it('[C4-EMPTY] a node that went silent with no log lines and no registered job yields empty evidence: [] log tail, null job (UX Empty state)', async () => {
+      const w = createWorld();
+      await report(w, NODE_IDS.map((n) => w.sim.packet({ node_id: n, timestamp_ms: T0 })));
+      for (let s = 1; s <= 18; s++) {
+        w.clock.advanceBy(1000);
+        await report(w, others(w, SILENT_NODE, w.clock.nowMs()));
+        await w.sut.monitor.tick();
+      }
+      const f = await w.sut.forensics.getNodeForensics(SILENT_NODE);
+      expect(f.state).toBe('SILENT_TIMEOUT');
+      expect(f.log_tail).toEqual([]);
+      expect(f.last_job).toBeNull();
+      expect(f.recommendation).toBe('CORDON_RECOMMENDED');
+    });
+
+    it('[C4-Q3] a view emits node.forensics.viewed once and counts it', async () => {
+      const w = createWorld();
+      await silentNodeScenario(w, 18_000);
+      await w.sut.forensics.getNodeForensics(SILENT_NODE);
+      const ev = w.events.ofType('node.forensics.viewed');
+      expect(ev).toHaveLength(1);
+      expect(ev[0]!.payload).toMatchObject({ node_id: SILENT_NODE, state: 'SILENT_TIMEOUT', actor: 'OPERATOR' });
+      expect(w.metrics.total('forensic_views_total', { state: 'SILENT_TIMEOUT' })).toBe(1);
+    });
+
+    it('[C4-Q4] the view is explainable: AD-04 rule id, observed silence and state, the 15 s / 5 s thresholds', async () => {
+      const w = createWorld();
+      await silentNodeScenario(w, 18_000);
+      const f = await w.sut.forensics.getNodeForensics(SILENT_NODE);
+      assertExplanation(f.explanation, {
+        ruleId: 'AD-04-WATCHDOG',
+        observed: { silence_duration_ms: 18_000, state: 'SILENT_TIMEOUT' },
+        observedKeys: ['consecutive_missed'],
+        thresholds: { timeout_ms: 15_000, heartbeat_interval_ms: 5000 },
+      });
+    });
+
+    it('[C4-Q2] the view is read-only: no write statement, database identical before and after', async () => {
+      const w = createWorld();
+      await silentNodeScenario(w, 18_000);
+      const before = fingerprint(w.db);
+      const sql = traceSql(w.db);
+      await w.sut.forensics.getNodeForensics(SILENT_NODE);
+      expect(sql.length, 'the view must read the preserved record').toBeGreaterThan(0);
+      expect(sql.filter((s) => /^\s*(INSERT|UPDATE|DELETE|REPLACE)/i.test(s))).toEqual([]);
+      expect(fingerprint(w.db)).toBe(before);
+    });
+  });
+
+  describe('Preconditions (P) violated -> typed error, zero mutations', () => {
+    it.each(['ws-gpu-00', 'ws-gpu-32', 'server-gpu-02', ''])('[C4-P1] node id %j -> ERR_UNKNOWN_NODE_ID (404)', async (id) => {
+      const w = createWorld();
+      const before = snapshot(w);
+      await expectContractError(w.sut.forensics.getNodeForensics(id), { code: 'ERR_UNKNOWN_NODE_ID', http: 404, retryable: false });
+      expectNoSideEffects(w, before);
+    });
+
+    it('[C4-P2] a HEALTHY node -> ERR_NODE_HEALTHY (409), nothing emitted', async () => {
+      const w = createWorld();
+      await silentNodeScenario(w, 18_000);
+      const before = snapshot(w);
+      await expectContractError(w.sut.forensics.getNodeForensics('ws-gpu-05'), { code: 'ERR_NODE_HEALTHY', http: 409, retryable: false });
+      expectNoSideEffects(w, before);
+    });
+
+    it('[C4-Qfail] if storage dies after the capture, the view returns ERR_DATABASE_UNAVAILABLE (503) with no event and no counter', async () => {
+      let broken = false;
+      const real = new SqliteForensicsRepo(null as never);
+      const guard = <A extends unknown[], R>(f: (...a: A) => Promise<R>) => (...a: A): Promise<R> => (broken ? Promise.reject(new StorageUnavailableError()) : f.apply(real, a));
+      const flaky: ForensicsRepositoryPort = { captureIfAbsent: guard(real.captureIfAbsent), load: guard(real.load), clear: guard(real.clear) };
+      const w = createWorld({ forensics: flaky });
+      await silentNodeScenario(w, 18_000);
+      broken = true;
+      const before = snapshot(w);
+      await expectContractError(w.sut.forensics.getNodeForensics(SILENT_NODE), { code: 'ERR_DATABASE_UNAVAILABLE', http: 503, retryable: true });
+      expectNoSideEffects(w, before);
+    });
+  });
+
+  describe('Invariants (I) and capture clause', () => {
+    it('[C4-I1] the log tail is frozen: still the same 50 lines 7 s later, and exactly one record was captured', async () => {
+      const w = createWorld();
+      await silentNodeScenario(w, 18_000);
+      const first = await w.sut.forensics.getNodeForensics(SILENT_NODE);
+      for (let n = 31; n <= 60; n++) w.logs.emit(SILENT_NODE, `after-${n}`);
+      for (let t = 0; t < 7; t++) {
+        w.clock.advanceBy(1000);
+        await report(w, others(w, SILENT_NODE, w.clock.nowMs()));
+        await w.sut.monitor.tick();
+      }
+      const second = await w.sut.forensics.getNodeForensics(SILENT_NODE);
+      expect(second.log_tail).toEqual(first.log_tail);
+      expect(second.silence_duration_ms).toBe(25_000);
+      expect(count(w.db, 'node_forensics')).toBe(1);
+    });
+
+    it('[C4-I2] the degradation timeline is strictly ascending, ends at or before the last heartbeat, and has at most 1,200 points', async () => {
+      const w = createWorld();
+      const lastHeartbeat = await silentNodeScenario(w, 18_000);
+      const { degradation_timeline: tl } = await w.sut.forensics.getNodeForensics(SILENT_NODE);
+      expect(tl.length).toBeLessThanOrEqual(1200);
+      for (let i = 1; i < tl.length; i++) expect(tl[i]!.timestamp_ms).toBeGreaterThan(tl[i - 1]!.timestamp_ms);
+      expect(tl.at(-1)!.timestamp_ms).toBeLessThanOrEqual(lastHeartbeat);
+    });
+
+    it('[C4-CON] two simultaneous monitor ticks at the first STALE evaluation capture exactly one record', async () => {
+      const w = createWorld();
+      await silentNodeScenario(w, 4000);
+      w.clock.advanceBy(1000);
+      await report(w, others(w, SILENT_NODE, w.clock.nowMs()));
+      await Promise.all([w.sut.monitor.tick(), w.sut.monitor.tick()]);
+      expect(count(w.db, 'node_forensics')).toBe(1);
+    });
+
+    it('[C4-REC] after 3 consecutive heartbeats the node is HEALTHY again: its record is deleted and the view answers ERR_NODE_HEALTHY', async () => {
+      const w = createWorld();
+      await silentNodeScenario(w, 18_000);
+      for (let i = 0; i < 3; i++) {
+        w.clock.advanceBy(5000);
+        await report(w, NODE_IDS.map((n) => w.sim.packet({ node_id: n, timestamp_ms: w.clock.nowMs() })));
+        await w.sut.monitor.tick();
+      }
+      expect(count(w.db, 'node_forensics')).toBe(0);
+      await expectContractError(w.sut.forensics.getNodeForensics(SILENT_NODE), { code: 'ERR_NODE_HEALTHY', http: 409, retryable: false });
     });
   });
 });
