@@ -10,7 +10,7 @@ import { join } from 'node:path';
 const dir = mkdtempSync(join(tmpdir(), 'red-guard-'));
 const out = join(dir, 'atdd.json');
 // node + the vitest entry point: portable (no `npx` / `npx.cmd` difference between Linux, macOS and Windows)
-const run = spawnSync(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', '--config', 'test/vitest.atdd.config.ts', '--reporter=json', `--outputFile=${out}`], { encoding: 'utf8' });
+const run = spawnSync(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', '--config', 'test/vitest.atdd.config.ts', '--reporter=json', `--outputFile=${out}`], { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
 let report;
 try {
   report = JSON.parse(readFileSync(out, 'utf8'));

@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url))); // fileURLToPath: .pathname breaks on Windows
-const read = (p) => readFileSync(join(root, p), 'utf8');
+const read = (p) => readFileSync(join(root, p), 'utf8').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 const matrix = read('test/traceability-matrix.md');
 
 const TAG = /\[((?:C[1-4]-|W-|X-|D-|S-)[A-Za-z0-9-]+|A-R\d)\]/g;
