@@ -139,8 +139,8 @@ All events ingested or emitted by Module 11 adhere to this immutable envelope st
   "occurredAt": "2026-10-19T17:00:15.000Z",
   "schemaVersion": "1.0.0",
   "payload": {
-    "alert_id": "ALT-TOKEN-SPIKE-891",
-    "incident_key": "INC-TOKEN-P99-2026101917",
+    "alert_id": "ALT-7K3M9Q2X",
+    "incident_key": "INC-TOKEN-P99-CLUSTER-1792429215000",
     "severity": "CRITICAL",
     "trigger_rule": "TOKEN_SPIKE_AND_LATENCY_BREACH",
     "observed_metrics": {
@@ -167,8 +167,8 @@ All events ingested or emitted by Module 11 adhere to this immutable envelope st
   "occurredAt": "2026-10-19T17:00:30.000Z",
   "schemaVersion": "1.0.0",
   "payload": {
-    "alert_id": "ALT-TOKEN-SPIKE-891",
-    "incident_key": "INC-TOKEN-P99-2026101917",
+    "alert_id": "ALT-7K3M9Q2X",
+    "incident_key": "INC-TOKEN-P99-CLUSTER-1792429215000",
     "status": "CLEARED",
     "resolved_at_ms": 1792429230000,
     "clearance_reason": "Observed metrics returned below breach thresholds for 3 consecutive 5-second evaluation cycles (15.0s hysteresis)."
