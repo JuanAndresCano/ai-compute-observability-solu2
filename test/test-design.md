@@ -72,6 +72,7 @@ Each behaviour is verified at the **lowest** level that can falsify it.
 | **TG-10** | **AMD-14** (baseline excludes the short window) is applied but **pending confirmation** by both partners | R-02 | Both partners |
 | **TG-11** | P95 budgets (15 ms, 5 ms, 1.5 s) cannot be measured with `FakeClock` | NFR evidence needs a real-clock bench harness | `nfr-evidence.md` N-01/N-03/N-06 (PLANNED, `bench/`) |
 | **TG-12** | Pure-domain tests are 19 % of the red suite by count (target 55 % of the final suite) | pyramid inverted until stories add unit tests | Stories' DoD |
+| **TG-13** | Tests assume the 250 ms window closes when the NEXT batch arrives (pull model, as Op1 Q2 reads); a timer-driven close would also be legitimate and would break the `flush()` helper | `C1-Q2a` and every test that flushes | Partner A: one sentence in Op1 Q2 |
 
 ## 5. Entry / exit criteria
 

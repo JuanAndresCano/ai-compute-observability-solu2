@@ -1,7 +1,7 @@
 # Hexagonal Architecture Mapping (Ports & Adapters)
 ## Module 11: AI Infrastructure Observability Console
 **Document Path:** `planning/detailed-design/ports-and-adapters.md`  
-**Status:** AMENDED v1.1 (AMD-9: sliding-window assembler added) — approval by Partner B: PENDING  
+**Status:** APPROVED v1.2 (Partner A and Partner B sign-off, 2026-10-26); amended in Phases 3-4 (assembler, forensics, monitor, UI and metrics ports)  
 **Author:** Juand (Partner A — Architect Lead)  
 **Reviewed by:** Partner B (Test Lead) — review in progress (`reviews/review-detailed-design.md` §6)  
 **Architectural Pattern:** Hexagonal Architecture (Alistair Cockburn / Ports and Adapters)  

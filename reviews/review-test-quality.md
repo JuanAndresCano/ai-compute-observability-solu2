@@ -1,7 +1,7 @@
 # Test Quality Review — Phase 3 (`bmad-testarch-test-review` criteria)
 
 **Target:** `test/atdd/observability_contracts.test.ts` (133 cases), `test/schema/` (31), `test/harness/` (32), `test/architecture/` (37), fixtures in `test/fixtures/`, `test/support/`
-**Reviewer:** Partner B (author of the suite) with Claude Code. **Not an independent review**: the author of the tests reviewed them. The rubric item "independent verification" is therefore open until **Partner A re-reviews this file and the suite** (listed as action TQ-A).
+**Reviewer:** Partner B (author of the suite) with Claude Code, plus the **independent re-review by Partner A (Juand) on 2026-10-26: PASS (TQ-A CLOSED)**. His scope: the ATDD, schema, harness and architecture suites and the fixtures; criteria: no tautologies, deterministic time, isolation, red for the right reason (`red-guard`), mutation of the DDL. He cites 11 of 11 schema mutants killed; the current mutation set has 15 (adds 4 in Phase 4), all killed.
 **Date:** 2026-10-26 · *Counts below are those of the review moment (133 red / 100 green). After the Phase 4 amendments the suite is 157 red / 117 green; the findings and checks still apply and `npm run ci` is the live source.* · **Criteria:** determinism, isolation, explicit assertions, no hard waits, traceable IDs, no tautologies, right-reason failure, strength against mutation.
 
 ## 1. Checks executed (all reproducible)
@@ -38,9 +38,9 @@
 | **TQ-12** | LOW | Error message templates are asserted only for `ERR_INVALID_ACADEMIC_SUBJECT` and the drift code. | **DEFER** | One table-driven template test per catalog code in Epic 1. |
 | **TQ-13** | LOW | Rule R5 (no SELECT-then-UPDATE) is a regex fitness function and can miss other shapes. | **ACCEPT — HEURISTIC** | The behavioural proof is `C2-I1a` + `S-05b`; R5 is a tripwire only. |
 | **TQ-14** | INFO | The suite was **never run against an implementation** (Stop-Point Rule forbids writing one). Test correctness is therefore established by: independent oracles for fixtures, DDL execution, mutation of the schema, and hand-checked arithmetic — not by seeing the tests go green. | **ACCEPT — LIMIT STATED** | First story's PR must show the relevant `RED → GREEN` transition; any case that cannot turn green is a test bug to fix before merging. |
-| **TQ-A** | — | Independent re-review by Partner A. | **OPEN** | Required before the Phase 3 gate is signed. |
+| **TQ-A** | — | Independent re-review by Partner A. | **CLOSED - PASS** | Done by Partner A (Juand) on 2026-10-26. |
 
 ## 3. Quality score
 
 Scored with the TEA rubric dimensions the author can evidence (not an official `bmad-testarch-test-review` run): determinism ✔, isolation ✔ (fresh DB + clock per test), explicit assertions ✔, traceability ✔ (111 ids), no hard waits ✔, right-reason red ✔ (guard), mutation-checked ✔ (schema only; domain mutation pending implementation).
-**Verdict:** *acceptable for handover to Phase 4, conditional on TQ-A and on the AMD-14 confirmation.*
+**Verdict:** *acceptable; TQ-A closed and AMD-14 confirmed by both partners on 2026-10-26.*

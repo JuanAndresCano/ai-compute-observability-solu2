@@ -5,7 +5,7 @@
 **Review Lens:** Adversarial Implementability Audit (`bmad-review --lens adversarial`)  
 **Reviewers:** Juand (Partner A — Architect Lead) & Partner (Partner B — Test Lead)  
 **Date:** 2026-10-19  
-**Status:** TRIAGED — Partner A signed; **Partner B approval PENDING** (the 2026-10-19 Partner B approval was pre-filled by Partner A and is withdrawn; see DEC-12)
+**Status:** TRIAGED & SIGNED OFF by both partners (2026-10-26). The 2026-10-19 Partner B approval was pre-filled by Partner A and was withdrawn (DEC-12); Partner B signed on 2026-10-26.
 
 ---
 
@@ -86,6 +86,6 @@ Under the AI Governance Level 3 rules, any ambiguity left in the architecture do
 
 ```
 Reviewed and Approved by:
-Partner A (Juand - Architect Lead): [APPROVED - 2026-10-19]
-Partner B (Test Lead):               [PENDING — to be signed by Partner B after reviewing the v1.1 amendments]
+Partner A (Juand - Architect Lead): [APPROVED - 2026-10-19; reconfirmed 2026-10-26]
+Partner B (Juan Andrés Cano - Test Lead): [SIGNED - 2026-10-26 - Phase 0 audit confirmed with the v1.1 stack declarations]
 ```

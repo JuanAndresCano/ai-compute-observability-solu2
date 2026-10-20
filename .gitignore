@@ -2,3 +2,7 @@ node_modules/
 coverage/
 .DS_Store
 *:Zone.Identifier
+
+# Local-only BMAD tooling (skills + config): ~12 MB, not part of the deliverable
+.claude/
+_bmad/
