@@ -1,0 +1,51 @@
+# Quality gate for Module 11 (Solu-2). Copy to .github/workflows/quality-gate.yml to activate.
+# Stop-Point Rule: during solutioning the ATDD suite is RED ON PURPOSE. The gate therefore asserts "red for the right reason",
+# not "green". After the first story merges, switch ATDD_MODE to "green-for-merged" (see test/test-design.md section 6).
+name: quality-gate
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 6 * * *'   # nightly: 15-minute storm (NFR-01)
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest        # GPU-less runner on purpose (NFR-08)
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+
+      - name: 1. Typecheck (tsc --strict, includes planning/.../dto.ts)
+        run: npm run typecheck
+
+      - name: 2. Harness + physical-schema + architecture suites (must be green)
+        run: npm test
+
+      - name: 3. Traceability has no broken link, no orphan test, no AD-n without a test
+        run: npm run trace:check
+
+      - name: 4. Red-guard - every ATDD case fails with NotImplementedError (none passes, none skipped)
+        run: npm run test:atdd:guard
+
+      - name: 5. Contract SQL executes (DDL applies on a clean SQLite)
+        run: |
+          node -e "const D=require('better-sqlite3');const fs=require('fs');const d=new D(':memory:');d.exec(fs.readFileSync('planning/detailed-design/schemas/001_observability_schema.sql','utf8'));console.log('DDL ok')"
+
+      - name: 6. Domain purity (no stub may import a driver, a wall clock or randomness)
+        run: npx vitest run --config test/vitest.harness.config.ts test/architecture
+
+  nightly-storm:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - name: Red-guard with the 15-minute storm (900 virtual seconds)
+        env: { STORM_SECONDS: '900' }
+        run: npm run test:atdd:guard
