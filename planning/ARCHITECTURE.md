@@ -85,7 +85,8 @@ The architecture decouples high-frequency telemetry ingestion ($5,000\text{ even
   * **Percentile Estimation:** Latencies are categorized into 100 fixed histogram buckets ($0\text{ to }20,000\text{ ms}$, with $200\text{ ms}$ resolution) to calculate $P_{99}$ with deterministic $O(1)$ memory and time complexity.
   * **Cold-Start Guard:** Anomaly evaluation is suppressed until $W_{\text{long}}$ accumulates at least 50 valid request events.
   * **Alert Trigger:** An alert is dispatched if:
-    $$\frac{\text{Throughput}(W_{\text{short}})}{\text{Throughput}(W_{\text{long}})} \ge 10.0 \quad \land \quad P_{99}(W_{\text{short}}) > 8,000\text{ ms}$$
+    $$\frac{\text{Throughput}(W_{\text{short}})}{\text{Throughput}([\text{now}-300\text{ s}, \text{now}-30\text{ s}))} \ge 10.0 \quad \land \quad P_{99}(W_{\text{short}}) > 8,000\text{ ms}$$
+    (Baseline excludes the short window: with nested windows the ratio is bounded by $10.0$ and the rule could not fire in practice. AMD-14.)
 
 ### 2.4 Node Heartbeat & Hysteresis State Machine
 * **Role:** Governs node lifecycle for all 32 machines, specifically detecting silent dropouts like `ws-gpu-22` (Scenario 3).

@@ -97,11 +97,17 @@ Lens: adversarial + edge-case hunter, run by the Test Lead before writing any te
 
 **Verification evidence for the fixes:** `001_observability_schema.sql` executed on SQLite 3.45.1 with positive and negative inserts for INV-05, INV-06 and the `node_id` CHECK; `dto.ts` compiled with `tsc --strict` (0 errors); `openapi.yaml` parsed with 0 unresolved `$ref`.
 
-### 6.1 Open observations (not fixed; to be decided by the pair before Phase 3 tests depend on them)
+### 6.1 Observations resolved by the pair decision (2026-10-26)
 
-| ID | Observation | Proposed handling |
-|:---:|---|---|
-| **OBS-1** | Op2 Q2 specifies only `TOKEN_SPIKE_AND_LATENCY_BREACH`, but P1 and the DDL admit `NODE_HEARTBEAT_TIMEOUT` and `THERMAL_CRITICAL_THRESHOLD`; no breach condition is defined for them. | Restrict Op2 P1 to the token rule, or add their conditions. |
-| **OBS-2** | The 3-cycle hysteresis (Q2 step 4) has no persisted counter in the DDL (`operational_alerts` has no `consecutive_clear_cycles`). | Add the column with `CHECK (0..3)`, or keep the counter in a domain object tested with `FakeClock`. |
-| **OBS-3** | `decimation_bucket_id` (Op1 Q1) names one `<node_id>-<gpu_idx>` but a batch spans many nodes. | Define it as the bucket of `events[0]`, or replace by `bucket_start_ms`. |
-| **OBS-4** | `is_empty` (Op3 Q1) uses "or zero jobs recorded", which is not machine-checkable. | Define as `utilized_gpu_hours = 0 AND total_prompt_tokens = 0 AND total_completion_tokens = 0`. |
+| ID | Observation | Decision | Fix |
+|:---:|---|:---:|---|
+| **OBS-1** | Op2 Q2 specified only the token rule, but P1 and the DDL admitted two more; `THERMAL_CRITICAL_THRESHOLD` has no FR in the PRD. | **ACCEPT (AMD-10)** | Op2 P1 admits only `TOKEN_SPIKE_AND_LATENCY_BREACH`; `THERMAL_CRITICAL_THRESHOLD` removed from DDL/DTO/OpenAPI; `NODE_HEARTBEAT_TIMEOUT` stays in the alerts table for `NodeHeartbeatWatchdog`. |
+| **OBS-2** | The 3-cycle hysteresis had no persisted counter. | **ACCEPT (AMD-11)** | Columns `consecutive_clear_cycles` (CHECK 0..3) and `last_cycle_index`; one conditional UPDATE per 5,000 ms cycle (verified on SQLite: duplicate call in the same cycle changes nothing, third cycle resolves). Persisted, not in-memory, for the reason recorded in DEC-10. |
+| **OBS-3** | `decimation_bucket_id` named one GPU but a batch spans many. | **ACCEPT (AMD-12)** | `BUCKET-<bucket_start_ms>`, `bucket_start_ms = floor(ingested_at_ms / 250) * 250`. |
+| **OBS-4** | `is_empty` used "zero jobs recorded". | **ACCEPT (AMD-13)** | `scanned_buckets_count = 0 OR (utilized_gpu_hours = 0 AND total_prompt_tokens = 0 AND total_completion_tokens = 0)`. |
+
+### 6.2 Defect found during Phase 3 (2026-10-26)
+
+| Finding | Lens | Severity | Defect | Triage | Fix |
+|:-:|:-:|:-:|---|:-:|---|
+| **REV-DET-16** | Edge-Case | HIGH | With the short window inside the long window (AMD-9), `Throughput(short) / Throughput(long) = 10·S/L <= 10.0`: the 10x alarm can only fire if all tokens of the last 300 s fell in the last 30 s. The same flaw is in `ARCHITECTURE.md` AD-03 from Plan-2. Found while building the data for `C2-Q1a`. | **ACCEPT - APPLIED PROVISIONALLY (AMD-14), pending confirmation by both partners** | Baseline = `(long_window_prompt_tokens - short_window_prompt_tokens) / 270` (`contracts.md` Op2 Q2 step 2 and Time, `ARCHITECTURE.md` section 2.3, `dto.ts`). Decision record: DEC-14. |

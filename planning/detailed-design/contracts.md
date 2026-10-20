@@ -7,7 +7,7 @@
 **Applicable Standard:** Design-by-Contract (DbC), Hexagonal Architecture, BMad TEA Standards  
 **Language Rule Enforcement:** ZERO elastic words (*efficiently, appropriately, securely, quickly, gracefully, reasonable, robust, properly, as needed, scalable, user-friendly, etc.* have been eliminated and replaced by explicit types, numbers, ranges, and status codes).
 
-**Amendment summary (v1.0 → v1.1):** AMD-1 overflow becomes tail-drop with visible `dropped_count`; AMD-2 cold start becomes a result status, not an error; AMD-3 alert uniqueness moves to `(trigger_rule, node_id)`; AMD-4 ring buffer sized for 33 GPU series; AMD-5 error catalog reduced to 8 codes, every code bound to a trigger; AMD-6 latency budgets cite the correct NFR; AMD-7 temperature range single-sourced; AMD-8 hourly rollup gains `gpu_hours_unavailable`; AMD-9 `evaluateAlertRule` receives its sample data in `SlidingWindowDTO`, and `ingestMetricBatch` validates and accumulates `inference_metrics`.
+**Amendment summary (v1.0 → v1.1):** AMD-1 overflow becomes tail-drop with visible `dropped_count`; AMD-2 cold start becomes a result status, not an error; AMD-3 alert uniqueness moves to `(trigger_rule, node_id)`; AMD-4 ring buffer sized for 33 GPU series; AMD-5 error catalog reduced to 8 codes, every code bound to a trigger; AMD-6 latency budgets cite the correct NFR; AMD-7 temperature range single-sourced; AMD-8 hourly rollup gains `gpu_hours_unavailable`; AMD-9 `evaluateAlertRule` receives its sample data in `SlidingWindowDTO`, and `ingestMetricBatch` validates and accumulates `inference_metrics`; AMD-10 `evaluateAlertRule` evaluates only `TOKEN_SPIKE_AND_LATENCY_BREACH` (the unspecified `THERMAL_CRITICAL_THRESHOLD` is removed); AMD-11 the 3-cycle hysteresis counter is persisted in `operational_alerts`; AMD-12 `decimation_bucket_id` identifies the 250 ms window; AMD-13 `is_empty` is machine-checkable; AMD-14 (**pending confirmation by both partners**) the token baseline excludes the short window.
 
 ---
 
@@ -30,7 +30,7 @@
     {
       accepted_count: number;       // = min(batch.events.length, free); first `accepted_count` events of the array
       dropped_count: number;        // = batch.events.length - accepted_count; the LAST `dropped_count` events of the array (tail-drop)
-      decimation_bucket_id: string; // Format: "BUCKET-<node_id>-<gpu_idx>-<timestamp_ms>"
+      decimation_bucket_id: string; // Format: "BUCKET-<bucket_start_ms>", bucket_start_ms = floor(ingested_at_ms / 250) * 250 (the 250 ms window active at ingestion)
       ingested_at_ms: number;       // Equal to clock.nowMs()
       explanation: ExplanationDTO;
     }
@@ -53,7 +53,7 @@
 ### Operation 2: `evaluateAlertRule(rule: AlertRuleDTO, window: SlidingWindowDTO, clock: ClockPort): AlertEvaluationDTO`
 * **Layer:** Core Domain (`AnomalyDetectionEngine`). The evaluator is a pure function of `(rule, window, clock.nowMs())`; the application service assembles `window` from the accumulators fed by Operation 1 (Q2).
 * **Precondition (P):**
-  * **P1:** `rule.rule_id` $\in \{\text{"TOKEN_SPIKE_AND_LATENCY_BREACH"}, \text{"NODE_HEARTBEAT_TIMEOUT"}, \text{"THERMAL_CRITICAL_THRESHOLD"}\}$; `window.short_window_seconds` $= 30$; `window.long_window_seconds` $= 300$; `window.histogram_bucket_count` $= 100$ ($200\text{ ms}$ width per bucket from $0$ to $20,000\text{ ms}$); `window.short_histogram` and `window.long_histogram` are arrays of exactly 100 integers $\ge 0$; `window.short_window_prompt_tokens` and `window.long_window_prompt_tokens` are integers $\ge 0$; the short window is contained in the long window: for every bucket $i$, `long_histogram[i]` $\ge$ `short_histogram[i]`, and `long_window_prompt_tokens` $\ge$ `short_window_prompt_tokens`.  
+  * **P1:** `rule.rule_id` $= \text{"TOKEN_SPIKE_AND_LATENCY_BREACH"}$ (the only rule this operation evaluates; `NODE_HEARTBEAT_TIMEOUT` alerts are raised by `NodeHeartbeatWatchdog`, AD-04); `window.short_window_seconds` $= 30$; `window.long_window_seconds` $= 300$; `window.histogram_bucket_count` $= 100$ ($200\text{ ms}$ width per bucket from $0$ to $20,000\text{ ms}$); `window.short_histogram` and `window.long_histogram` are arrays of exactly 100 integers $\ge 0$; `window.short_window_prompt_tokens` and `window.long_window_prompt_tokens` are integers $\ge 0$; the short window is contained in the long window: for every bucket $i$, `long_histogram[i]` $\ge$ `short_histogram[i]`, and `long_window_prompt_tokens` $\ge$ `short_window_prompt_tokens`.  
     $\to$ *Violation:* `ERR_INVALID_ALERT_RULE_SPEC` (HTTP 422 Unprocessable Entity).
   * *(There is no baseline-quorum precondition: a long window with fewer than 50 samples is a valid input that produces the `SUPPRESSED_COLD_START` result in Q2.)*
 * **Postcondition (Q):**
@@ -70,9 +70,10 @@
     ```
   * **Q2 (evaluation order):**
     1. *Cold start.* Let $N_{\text{long}} = \sum_i \text{long\_histogram}[i]$. If $N_{\text{long}} < 50$: `status = "SUPPRESSED_COLD_START"`, `alert_payload = null`, zero database mutations, active alerts untouched, hysteresis not advanced.
-    2. *Metrics.* $\text{baseline\_tps} = \text{long\_window\_prompt\_tokens} / 300$; $\text{current\_tps} = \text{short\_window\_prompt\_tokens} / 30$; $\text{spike\_ratio} = \text{current\_tps} / \text{baseline\_tps}$ if $\text{baseline\_tps} > 0$, otherwise the spike condition is false. $N_{\text{short}} = \sum_i \text{short\_histogram}[i]$; $P_{99}$ is the upper edge $(i+1) \times 200\text{ ms}$ of the first bucket $i$ whose cumulative short-window count is $\ge \lceil 0.99 \times N_{\text{short}} \rceil$; $P_{99} = 0.0$ if $N_{\text{short}} = 0$. Breach $\iff \text{spike\_ratio} \ge 10.0 \;\land\; P_{99} > 8,000.0\text{ ms}$.
+    2. *Metrics.* $\text{baseline\_tps} = (\text{long\_window\_prompt\_tokens} - \text{short\_window\_prompt\_tokens}) / 270$ (the baseline is the 270 s that precede the short window; with nested windows the ratio could never exceed $10.0$, so the alarm could fire only if every token of the last 300 s fell in the last 30 s, AMD-14); $\text{current\_tps} = \text{short\_window\_prompt\_tokens} / 30$; $\text{spike\_ratio} = \text{current\_tps} / \text{baseline\_tps}$ if $\text{baseline\_tps} > 0$, otherwise the spike condition is false. $N_{\text{short}} = \sum_i \text{short\_histogram}[i]$; $P_{99}$ is the upper edge $(i+1) \times 200\text{ ms}$ of the first bucket $i$ whose cumulative short-window count is $\ge \lceil 0.99 \times N_{\text{short}} \rceil$; $P_{99} = 0.0$ if $N_{\text{short}} = 0$. Breach $\iff \text{spike\_ratio} \ge 10.0 \;\land\; P_{99} > 8,000.0\text{ ms}$.
     3. *Breach.* `status = "TRIGGERED"`. The service executes one atomic statement `INSERT INTO operational_alerts (...) VALUES (...) ON CONFLICT (trigger_rule, node_id) WHERE resolved_at_ms IS NULL DO NOTHING`, with `node_id = "CLUSTER"` and `incident_key = "INC-TOKEN-P99-CLUSTER-" || <triggered_at_ms>`. If 1 row was inserted, `alert_payload` is the new alert. If 0 rows were inserted (an active alert for `("TOKEN_SPIKE_AND_LATENCY_BREACH", "CLUSTER")` already exists), `status` is still `"TRIGGERED"`, `alert_payload` is the existing alert, zero rows are created, and no new audit event is emitted.
-    4. *No breach.* While an active alert exists, `status = "TRIGGERED"` and the alert stays active; when the breach condition has failed for 3 consecutive 5-second evaluation cycles ($15.0\text{ s}$ hysteresis), the active alert record is mutated with `resolved_at_ms = clock.nowMs()` and `status = "CLEARED"`. With no active alert, `status = "CLEARED"` and nothing is mutated.
+    4. *No breach.* Let `cycle = floor(clock.nowMs() / 5000)`. With an active alert, `status = "TRIGGERED"` and one conditional `UPDATE operational_alerts SET consecutive_clear_cycles = consecutive_clear_cycles + 1, last_cycle_index = cycle WHERE trigger_rule = ? AND node_id = ? AND resolved_at_ms IS NULL AND (last_cycle_index IS NULL OR last_cycle_index < cycle)` counts the evaluation (a second call within the same 5,000 ms cycle changes nothing). When `consecutive_clear_cycles` reaches 3 (three consecutive evaluated cycles, covering $15.0\text{ s}$ of observed no-breach time), the same statement sets `resolved_at_ms = clock.nowMs()` and `status = "CLEARED"`, and the returned `status` is `"CLEARED"`. With no active alert, `status = "CLEARED"` and nothing is mutated.
+    5. *Breach resets the counter.* In step 3, when the insert was skipped by `ON CONFLICT`, one unconditional `UPDATE operational_alerts SET consecutive_clear_cycles = 0 WHERE trigger_rule = ? AND node_id = ? AND resolved_at_ms IS NULL` runs; it is idempotent and takes no decision, so it is not a SELECT-then-UPDATE.
   * **Q3:** Emits audit event `alert.anomaly.triggered` (only when step 3 inserted a row) or `alert.anomaly.resolved` (step 4 resolution). Increments counter metric `alerts_emitted_total{rule_id="TOKEN_SPIKE_AND_LATENCY_BREACH"}` on `alert.anomaly.triggered` only.
   * **Q4:** Explainability payload in `AnomalyAlertPayload` cites:
     * `rule_id: "AD-03-ANOMALY-EVAL"`
@@ -89,7 +90,7 @@
   * **I1:** At most 1 active alert exists per `(trigger_rule, node_id)` at any instant; a second active row is physically barred by the partial unique index `idx_unique_active_alert ON operational_alerts(trigger_rule, node_id) WHERE resolved_at_ms IS NULL`. `incident_key` is unique across all rows (resolved or not) and identifies one incident. Bound to: **AD-03, AD-05**.
   * **I2:** $P_{99}$ latency calculation uses a static 100-bucket histogram, enforcing deterministic $O(1)$ memory ($< 1\text{ KB}$) and execution time $\le 5.0\text{ ms}$. Bound to: **AD-03**.
 * **Concurrency / Idempotency:** Atomic SQLite conditional insert (Q2 step 3). Two parallel breaching calls produce exactly 1 row; both return `status = "TRIGGERED"` with the same `alert_id`; exactly 1 `alert.anomaly.triggered` event is emitted. A repeated call with the same `window` returns the same `status` and creates 0 additional rows.
-* **Time:** Governed by `clock: ClockPort`. The assembled windows cover the half-open intervals $W_{\text{short}} = [\text{now} - 30000, \text{now})$ and $W_{\text{long}} = [\text{now} - 300000, \text{now})$; `evaluated_at_ms`, `triggered_at_ms` and `resolved_at_ms` are read from `clock.nowMs()`.
+* **Time:** Governed by `clock: ClockPort`. The assembled windows cover the half-open intervals $W_{\text{short}} = [\text{now} - 30000, \text{now})$ and $W_{\text{long}} = [\text{now} - 300000, \text{now})$ (so the baseline interval is $[\text{now} - 300000, \text{now} - 30000)$); `evaluated_at_ms`, `triggered_at_ms` and `resolved_at_ms` are read from `clock.nowMs()`.
 * **Latency Budget (design budget, not a PRD NFR):** Alert rule evaluation across all 32 nodes completes with $P_{95} \le 5.0\text{ ms}$. Derived from NFR-03 (alarm dispatched $\le 1.0\text{ s}$ after the window satisfies both conditions): the evaluation consumes $0.5\%$ of that budget.
 
 ---
@@ -121,7 +122,7 @@
       };
       by_subject: Record<string, SubjectBreakdownDTO>;
       node_aggregates: NodeRollupDTO[];
-      is_empty: boolean;               // True iff total_cluster_gpu_hours === 0 or zero jobs recorded
+      is_empty: boolean;               // True iff scanned_buckets_count === 0, or (utilized_gpu_hours === 0 AND total_prompt_tokens === 0 AND total_completion_tokens === 0)
       explanation: ExplanationDTO;
     }
     ```
