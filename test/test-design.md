@@ -21,9 +21,9 @@
 | **R-08** | BUS | **Cold-start false positive** on cluster boot | 2 | 2 | 4 | P1 | AD-03, INV-03, AMD-2 | `C2-Q2c/d/e`, `D-ENG-b` |
 | **R-09** | PERF | **Report scans raw telemetry** instead of hourly rollups (breaks ≤ 1.5 s) | 2 | 2 | 4 | P1 | AD-06, INV-06 | `C3-I1`, `C3-Q2` |
 | **R-10** | DATA | **Invalid input partially written / untyped error** | 2 | 2 | 4 | P1 | Typed Error Catalog (8 codes), Q-fail clauses | `C1-P1a..c`, `C1-P2a/b`, `C2-P1`, `C3-P1a..P3` |
-| **R-11** | TECH | **Hidden wall-clock / randomness in `domain/`** makes tests flaky and AD-07 untestable | 2 | 2 | 4 | P1 | AD-07, INV-07, hexagon rules R1–R5 | `test/architecture/purity.test.ts` (37), `X-AD07` |
+| **R-11** | TECH | **Hidden wall-clock / randomness in `domain/`** makes tests flaky and AD-07 untestable | 2 | 2 | 4 | P1 | AD-07, INV-07, hexagon rules R1–R5 | `test/architecture/purity.test.ts` (46), `X-AD07` |
 | **R-12** | DATA | **Replay of a `batch_id` double-counts** (idempotency store undefined, TG-1) | 2 | 2 | 4 | P1 | Op1 Concurrency clause | `C1-CON-a`, `C1-CON-b` |
-| **R-13** | BUS | **Forensic drill-down (FR-03) has no contract** (stderr tail, degradation timeline), TG-4 | 2 | 2 | 4 | P1 | none yet → needs a story + contract | *no test possible today* (see §4) |
+| **R-13** | BUS | **Forensic drill-down (FR-03) lost or mutated evidence:** the log tail grows after the crash, the record is captured twice, or it survives recovery (contract added in Phase 4: Op4, AMD-16) | 2 | 2 | 4 | P1 | AD-04, Op4 I1/I2, capture clause | `C4-Q1a`, `C4-I1`, `C4-I2`, `C4-CON`, `C4-REC`, schema `S-04c/d` |
 | **R-14** | BUS | **WCAG 2.1 AA not met** (NFR-07) | 2 | 2 | 4 | P1 | NFR-07 | UI/E2E axe-core run, planned (nfr-evidence N-07); outside the backend red suite |
 | **R-15** | DATA | **Storage failure leaves partial state** | 1 | 3 | 3 | P2 | ERR_DATABASE_UNAVAILABLE on all 3 ops | `C1-Qfail`, `C2-Qfail`, `C3-Qfail` |
 | **R-16** | OPS | **Cloud / network dependency creeps in** (NFR-08) | 1 | 2 | 2 | P2 | AD-07, INV-07 | `X-AD07`, purity R1–R3 |
@@ -38,12 +38,12 @@ Each behaviour is verified at the **lowest** level that can falsify it.
 | Level | What is verified there | Planned share of the final suite | Today |
 |---|---|:-:|---|
 | **Unit — pure domain** | decimation statistics and window boundaries, P99 histogram, spike/breach formulas, cold-start guard, ring-buffer pointer, heartbeat state machine; property tests (fast-check) | **55 %** | 28 ATDD cases (`D-*`, `W-*`, `C1-I1a`, `C1-I2`, `C2-PURE`, `C2-I2a/b`) |
-| **Contract / integration — use case + SQLite** | atomicity and uniqueness, persistence, rollback, idempotent replay, parallel calls, typed errors with zero side effects, audit events and counters | 30 % | 105 ATDD cases + 31 schema constraint tests |
+| **Contract / integration — use case + SQLite** | atomicity and uniqueness, persistence, rollback, idempotent replay, parallel calls, typed errors with zero side effects, audit events and counters | 30 % | 121 ATDD cases + 33 schema constraint tests |
 | **API — HTTP/WS adapters** | status codes, `Retry-After` header, WebSocket close 1008, OpenAPI conformance | 10 % | 0 — driving adapters are not stubbed in this unit; planned in Epic 1 stories |
 | **E2E — UI scenarios** | heatmap at 4 Hz, banner, drawer, WCAG | 5 % | 0 — UI not in the solutioning scope |
-| **Static fitness** | hexagon rules R1–R5, no wall clock, no SELECT-then-UPDATE | n/a | 36 (`test/architecture`) |
+| **Static fitness** | hexagon rules R1–R5, no wall clock, no SELECT-then-UPDATE | n/a | 46 (`test/architecture`) |
 
-**Honest note on the numbers.** The red ATDD suite is *acceptance-level through the inbound ports*, so by count it is dominated by the use-case level (105 of 133). The "55 % pure domain" target applies to the final suite: every story's Definition of Done requires the domain unit tests for its clauses (TDD), and the properties already present are the seed. This is recorded as a gap, not hidden (TG-12).
+**Honest note on the numbers.** The red ATDD suite is *acceptance-level through the inbound ports*, so by count it is dominated by the use-case level (121 of 149). The "55 % pure domain" target applies to the final suite: every story's Definition of Done requires the domain unit tests for its clauses (TDD), and the properties already present are the seed. This is recorded as a gap, not hidden (TG-12).
 
 ## 3. Coverage thresholds
 
@@ -63,20 +63,20 @@ Each behaviour is verified at the **lowest** level that can falsify it.
 | **TG-1** | `batch_id` idempotency has no storage (no table, no port). I added `TelemetryRepositoryPort.registerBatch` as a stub. In-memory (lost on restart) or a table? | R-12: replay after restart double-counts | Partner A: add `ingested_batches` table or declare in-memory + TTL |
 | **TG-2** | `rollup_hourly_metrics.hour_epoch` is "Unix timestamp" (seconds) but every contract time is milliseconds | off-by-1000 in `buildUtilizationReport` | Partner A: rename `hour_epoch_s` or switch to ms. Fixture uses seconds per the DDL comment |
 | **TG-3** | `NodeRollupDTO.average_temperature_celsius / average_gpu_utilization_pct` and `SubjectBreakdownDTO.allocated_gpu_hours / share_pct` cannot be computed from `rollup_hourly_metrics` (no such columns) or are undefined | those fields are untestable; ATDD does not assert them | Partner A: add columns or drop the fields |
-| **TG-4** | FR-03 forensic drill-down (last 50 stderr lines, degradation timeline) has no contract, DTO, endpoint or table | R-13: scenario 3's second half is unverifiable | New contract + story (Epic 3) |
+| **TG-4** | FR-03 forensic drill-down had no contract, DTO, endpoint or table | R-13 | **Closed in Phase 4:** Operation 4 `getNodeForensics` + `node_forensics` table + `NodeMonitorService.tick()` capture clause (AMD-16) |
 | **TG-5** | Two sources of node state: `cluster_nodes.current_state` and `node_heartbeats.state`; `node_heartbeats` has no FK | ambiguous authority | Partner A: single source + FK |
 | **TG-6** | No port for the 4 Hz UI dispatch nor for counters | INV-01/I2 and Q3 unobservable | **Done:** `UiDispatchPort`, `MetricsPort` added as stubs and to `ports-and-adapters.md` |
 | **TG-7** | `Retry-After: 1` and WS close 1008 exist only in the HTTP/WS adapter | not assertable at the port | API-level tests in Epic 1 |
 | **TG-8** | `NodeHeartbeatWatchdog.check()` output when several states are crossed in one call is unspecified; "consecutive heartbeats" with a gap is only implied | W-2/W-4 assert only what AD-04 states | Partner A: one sentence in AD-04 |
-| **TG-9** | Nobody is the scheduler: who calls `evaluateAlertRule` every 5 s and `watchdog.check()`? | the 5 s cycle (AMD-11) has no owner | Story in Epic 2 |
+| **TG-9** | Nobody was the scheduler: who calls `evaluateAlertRule` and `watchdog.check()`? | the cycles had no owner | **Closed in Phase 4:** `MonitoringPort.tick()` every 1,000 ms (AMD-17); story 3.4 |
 | **TG-10** | **AMD-14** (baseline excludes the short window) is applied but **pending confirmation** by both partners | R-02 | Both partners |
 | **TG-11** | P95 budgets (15 ms, 5 ms, 1.5 s) cannot be measured with `FakeClock` | NFR evidence needs a real-clock bench harness | `nfr-evidence.md` N-01/N-03/N-06 (PLANNED, `bench/`) |
-| **TG-12** | Pure-domain tests are 21 % of the red suite by count (target 55 % of the final suite) | pyramid inverted until stories add unit tests | Stories' DoD |
+| **TG-12** | Pure-domain tests are 19 % of the red suite by count (target 55 % of the final suite) | pyramid inverted until stories add unit tests | Stories' DoD |
 
 ## 5. Entry / exit criteria
 
 **Entry (met):** contracts v1.1 + schemas executable; 5 fixtures with self-tests; ATDD red for the right reason; gaps TG-1..12 logged.
-**Exit for Phase 3:** `npm run ci` green (typecheck, 100 harness tests, trace check, red-guard 133/133); traceability has no orphan AD-n; Partner A confirms AMD-14.
+**Exit for Phase 3:** `npm run ci` green (typecheck, 115 harness tests, trace check, red-guard 149/149); traceability has no orphan AD-n; Partner A confirms AMD-14.
 
 ## 6. Execution strategy (CI)
 
@@ -88,7 +88,7 @@ Each behaviour is verified at the **lowest** level that can falsify it.
 
 ## 7. Evidence that the plan is executable
 
-* `npm test` → 100 passed (32 fixture self-tests, 31 schema, 37 architecture); fixtures at 99.4 % line coverage.
-* `npm run test:atdd:guard` → 133 cases, 133 red for the right reason, 0 not red.
+* `npm test` → 115 passed (36 fixture self-tests, 33 schema, 46 architecture); fixtures at ≥ 99 % line coverage.
+* `npm run test:atdd:guard` → 149 cases, 149 red for the right reason, 0 not red.
 * Guard self-test: an injected passing case, an injected skipped case and an injected wrong-reason case make the guard exit 1.
 * Mutation check of the DDL: 11 of 11 constraint mutants are killed by the schema suite.

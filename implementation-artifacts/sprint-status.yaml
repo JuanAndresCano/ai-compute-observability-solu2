@@ -1,0 +1,64 @@
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates the next story after the previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; the status view surfaces open ones
+generated: 10-26-2026 12:00
+last_updated: 10-26-2026 12:00
+project: Module 11 - AI Infrastructure Observability Console
+project_key: NOKEY
+tracking_system: file-system
+story_location: implementation-artifacts
+development_status:
+  epic-1: backlog
+  1-1-liam-starts-the-console-standalone-with-the-32-node-fleet: backlog
+  1-2-liam-watches-one-valid-batch-reach-the-heatmap-walking-skele: backlog
+  1-3-liam-is-told-exactly-why-a-frame-was-refused-and-nothing-is: backlog
+  1-4-liam-sees-both-gpus-of-the-central-server-never-averaged: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-memory-is-flat-and-the-ui-is-never-dispatched-more-than-4-ti: backlog
+  2-2-liam-sees-drops-counted-and-a-429-only-when-the-queue-is-ful: backlog
+  2-3-liam-trusts-the-console-through-a-15-minute-storm: backlog
+  2-4-a-retry-or-a-parallel-sender-never-double-counts: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-the-anomaly-engine-tells-a-real-surge-from-normal-load: backlog
+  3-2-one-alarm-per-incident-with-its-explanation: backlog
+  3-3-no-false-alarm-at-boot-and-the-alarm-clears-after-15-s-of-ca: backlog
+  3-4-ws-gpu-22-goes-silent-and-liam-sees-it-at-exactly-15-s: backlog
+  3-5-liam-opens-the-evidence-of-the-silent-node: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-management-reads-the-7-day-utilization-report: backlog
+  4-2-management-gets-an-honest-empty-state-and-clear-refusals: backlog
+  4-3-everything-runs-offline-and-the-accessibility-audit-passes: backlog
+  epic-4-retrospective: optional

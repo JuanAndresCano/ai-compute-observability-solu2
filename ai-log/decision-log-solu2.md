@@ -25,7 +25,10 @@
 | **DEC-14** | Phase 3 (ATDD data design) | Unreachable alarm threshold: nested windows cap the spike ratio at 10.0 (AMD-14) | AI built the first breach fixture from the contract formula and found a 11.2x surge could not be expressed | **PROPOSED, applied provisionally:** baseline = the 270 s before the short window; **pending confirmation by both partners** | **PENDING** | **Partner B** (Partner A to confirm) |
 | **DEC-15** | Phase 3 (test preparation) | How to prepare tests without writing production logic; what the red suite covers; self-review disclosure | AI proposed an oracle implementation to prove the tests can go green | **REJECTED the oracle implementation** (stop-point rule); chose independent oracles, DDL mutation, red-guard probe | **ADOPTED** | **Partner B** |
 
-*(Note: entries for Phase 4 (epics, gate, gate drill) continue from DEC-16 and are recorded by Partner B.)*
+| **DEC-16** | Phase 4 (epics + readiness audit) | Close contract gaps (AMD-15..20, Operation 4, FleetSnapshotDTO) BEFORE writing stories | AI proposed writing the stories first and leaving the gaps as "contract-first tasks" inside stories | **MODIFIED by the AI under Partner B's standing instruction to move fast; Partner B review PENDING.** Gaps closed first, 6 findings REV-DET-20..24 + 3 PRD alignments | **PENDING REVIEW** | **Partner B** (to confirm) |
+| **DEC-17** | Phase 4 (gate drill) | The first drill found a hole in the readiness control itself | First rename of a DTO in a story was NOT detected | **ACCEPT the fix:** regex widened (`DTO|Dto|dto|Type`), drill repeated and caught | **ADOPTED** | **Partner B** (to confirm) |
+
+*(Note: Phase 5 entries (wrap-up) continue from DEC-18.)*
 
 ---
 
@@ -165,3 +168,27 @@
 * **Other decisions in this phase:** the red seam is `System` + stubs throwing `NotImplementedError`, and rejection helpers re-throw it so a red test always fails because the stub is empty; physical invariants are tested in a separate green schema suite that turns red if a constraint is removed; the P0 storm is parameterised (`STORM_SECONDS`, 60 s in PR, 900 s nightly) instead of skipped, because the guard forbids skipped tests; the review in `reviews/review-test-quality.md` was done by the author and is marked non-independent until Partner A re-reviews it.
 * **Artifacts Changed:** `test/**`, `src/**` (interface stubs only), `package.json`, `tsconfig.json`, `reviews/review-test-quality.md`.
 * **Pair Attribution:** Partner B.
+
+---
+
+### Entry DEC-16: Close the Contract Gaps Before Writing the Stories
+* **Timestamp:** 2026-10-26
+* **Lifecycle Phase:** Phase 4 - Step 4.1 (epics) and the readiness audit checks 1, 2 and 5
+* **AI Persona / Skill Invoked:** John (PM) / Amelia (Dev) perspective, `bmad-create-epics-and-stories` structure followed by hand; the skill itself could not be loaded from this repository.
+* **Trigger Prompt / Context:** Partner B asked to move to Phase 4 quickly and to take on as much of the second half as possible. Mapping requirements to stories showed that FR-03 (forensic drill-down), the FR-04 "peak contention window" and the heatmap / Storm Mode / STALE_CACHED outputs had no contract or DTO, and that `batch_id` storage, `hour_epoch` units and two report DTO fields were undefined.
+* **AI Generated Proposal:** Option A - write the 16 stories and turn each gap into a "contract-first" task inside its story. Option B - amend the contracts first so every story is implementable without inventing a decision.
+* **Decision recorded:** B, because the audit question is exactly "could a developer implement these epics without inventing decisions nothing records?" and a story that starts by deciding the contract fails it. **This was decided by the AI inside Partner B's general instruction, not by an explicit per-item answer; Partner B (and Partner A) must review AMD-15..20 and may revert any of them.**
+* **What changed:** AMD-15 `peak_contention_windows`; AMD-16 Operation 4 `getNodeForensics` + capture clause + `node_forensics` + 2 error codes; AMD-17 1,000 ms loop vs 5,000 ms cycle and "every accepted event is a heartbeat"; AMD-18 `FleetSnapshotDTO`; AMD-19 `ingested_batches`; AMD-20 `hour_epoch` in seconds and definitions of `by_subject` / `node_aggregates`; PRD FR-01 and FR-02 aligned to the contract (REV-DET-17..19). Findings: `reviews/review-detailed-design.md` section 6.3 (REV-DET-17..26).
+* **Verification:** DDL executed on SQLite 3.45 (forensics CHECK rejects 51 lines, invalid JSON, unknown node; upsert returns 1 then 0; batch id registers once); `dto.ts` compiled with `tsc --strict`; OpenAPI parsed with 0 unresolved `$ref`; 20 new red tests and 7 new green tests (3 schema, 4 fixture self-tests); `npm run ci` green.
+* **Artifacts Changed:** `contracts.md` (v1.2), `dto.ts`, `openapi.yaml`, `001_observability_schema.sql`, `events.md`, `prd.md`, `ports-and-adapters.md`, `test/**`, `src/**` (stubs), `planning/epics.md`.
+* **Pair Attribution:** AI-proposed under Partner B's instruction; Partner B to confirm; Partner A to review.
+
+---
+
+### Entry DEC-17: The Gate Drill Found a Hole in the Control
+* **Timestamp:** 2026-10-26
+* **Lifecycle Phase:** Phase 4 - Step 4.3 (gate drill)
+* **What happened:** Break 1 (delete the `Binding invariants` line of Story 2.2) was reported by `readiness-check` ("Story 2.2: missing field Binding invariants"). Break 2 (rename `FleetCellDTO` to `FleetCellDto` in Story 3.4 only) was **not** reported: the check looked for tokens ending in `DTO`, and the broken name no longer matched the pattern. The control was a rubber stamp for that class of break.
+* **Fix:** the token pattern now matches `DTO|Dto|dto|Type|type`; the drill was repeated and reported "Story 3.4: DTO/type \"FleetCellDto\" does not exist in dto.ts"; the story was restored byte-identical and the check passed. Full log in `planning/readiness-gate-report.md`.
+* **Also observed:** `sprint_plan.py` (the skill's script) parsed both broken files without a warning (`in_sync: true`); it validates headings and statuses, not story content. The content checks are the judgement part of the gate and `readiness-check.mjs`.
+* **Pair Attribution:** AI executed the drill; Partner B to confirm.
