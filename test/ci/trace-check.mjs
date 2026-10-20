@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Machine check of test/traceability-matrix.md against the code. Exit 1 on any broken link.
+import { fileURLToPath } from 'node:url';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-const root = resolve(new URL('../..', import.meta.url).pathname);
+const root = resolve(fileURLToPath(new URL('../..', import.meta.url))); // fileURLToPath: .pathname breaks on Windows
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const matrix = read('test/traceability-matrix.md');
 
@@ -12,7 +13,7 @@ const sources = ['test/atdd/observability_contracts.test.ts', 'test/schema/schem
 const testSrc = sources.map(read).join('\n');
 const inCode = new Set([...testSrc.matchAll(TAG)].map((m) => m[1]));
 
-const ID = /\b(?:C[1-4]-[A-Z0-9a-z]+(?:-[A-Za-z0-9]+)*|W-\d|X-AD07|D-[A-Z]+-[a-e]|S-\d\d[a-h]|A-R\d)\b/g;
+const ID = /\b(?:C[1-4]-[A-Z0-9a-z]+(?:-[A-Za-z0-9]+)*|W-\d|X-AD07|D-[A-Z]+-[a-f]|S-\d\d[a-h]|A-R\d)\b/g;
 const rows = matrix.split('\n').filter((l) => /^\|\s*(FR|NFR)/.test(l));
 const inMatrix = new Set();
 const problems = [];

@@ -98,7 +98,7 @@ describe('INV-06 / AD-06: every GPU-hour is fully accounted for', () => {
   const insertRollup = (busy: number, idle: number, unavailable: number, hour = 3600) =>
     db
       .prepare(
-        `INSERT INTO rollup_hourly_metrics (node_id, gpu_index, hour_epoch, gpu_hours_busy, gpu_hours_idle, gpu_hours_unavailable,
+        `INSERT INTO rollup_hourly_metrics (node_id, gpu_index, hour_epoch_s, gpu_hours_busy, gpu_hours_idle, gpu_hours_unavailable,
            prompt_tokens_total, completion_tokens_total, primary_subject, created_at_ms) VALUES ('ws-gpu-01', 0, ?, ?, ?, ?, 0, 0, 'IDLE', ?)`,
       )
       .run(hour, busy, idle, unavailable, T0);
@@ -179,6 +179,10 @@ describe('AD-01 / AD-02: telemetry bucket integrity', () => {
     const uuid = '00000000-0000-4000-9000-000000000001';
     expect([reg(uuid), reg(uuid)]).toEqual([1, 0]);
     expect(() => db.prepare(`INSERT INTO ingested_batches VALUES ('short', ?)`).run(T0)).toThrow(/CHECK/);
+  });
+  it('[S-01g] pruning old batch ids uses the time index instead of scanning the table (AMD-19)', () => {
+    const plan = db.prepare(`EXPLAIN QUERY PLAN DELETE FROM ingested_batches WHERE ingested_at_ms < ?`).all(T0) as { detail: string }[];
+    expect(plan.map((p) => p.detail).join(' ')).toMatch(/USING (COVERING )?INDEX idx_ingested_batches_time/);
   });
   it.each([[-20.1, 55], [50, 120.1]])('[S-01d] rejects temperatures outside [-20, 120] (min=%s max=%s)', (tmin, tmax) => {
     expect(() => insert(bucket({ tmin, tmax }))).toThrow(/CHECK/);

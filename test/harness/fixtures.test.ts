@@ -175,7 +175,7 @@ describe('7-day rollup fixture', () => {
     const db = createTestDb();
     seedRollups(db, T0 / 1000);
     expect(count(db, 'rollup_hourly_metrics')).toBe(5544);
-    const first = db.prepare(`SELECT MIN(hour_epoch) AS m FROM rollup_hourly_metrics`).get() as { m: number };
+    const first = db.prepare(`SELECT MIN(hour_epoch_s) AS m FROM rollup_hourly_metrics`).get() as { m: number };
     expect(first.m).toBe(T0 / 1000 - 168 * HOUR_S);
   });
   it('outage hours of ws-gpu-22 are fully unavailable, not idle', () => {
@@ -219,7 +219,7 @@ describe('rollup fixture: hourBusy', () => {
     const db = createTestDb();
     seedRollups(db, T0 / 1000, { hourBusy: { 10: 1, 11: 0.999 } });
     const hour = (h: number) => T0 / 1000 - (168 - h) * HOUR_S;
-    const sums = (h: number) => db.prepare('SELECT SUM(gpu_hours_busy) AS b, SUM(gpu_hours_idle) AS i, COUNT(*) AS n FROM rollup_hourly_metrics WHERE hour_epoch = ?').get(hour(h)) as { b: number; i: number; n: number };
+    const sums = (h: number) => db.prepare('SELECT SUM(gpu_hours_busy) AS b, SUM(gpu_hours_idle) AS i, COUNT(*) AS n FROM rollup_hourly_metrics WHERE hour_epoch_s = ?').get(hour(h)) as { b: number; i: number; n: number };
     expect(sums(10)).toEqual({ b: 33, i: 0, n: 33 });
     expect(sums(11).b).toBeCloseTo(33 * 0.999, 9);
     expect(sums(12)).toEqual({ b: 16.5, i: 16.5, n: 33 });

@@ -21,7 +21,7 @@ export function seedRollups(db: Database, endHourS: number, opts: { outageHours?
   const outage = opts.outageHours ?? 0;
   const insert = db.prepare(
     `INSERT INTO rollup_hourly_metrics
-     (node_id, gpu_index, hour_epoch, gpu_hours_busy, gpu_hours_idle, gpu_hours_unavailable, prompt_tokens_total, completion_tokens_total, primary_subject, created_at_ms)
+     (node_id, gpu_index, hour_epoch_s, gpu_hours_busy, gpu_hours_idle, gpu_hours_unavailable, prompt_tokens_total, completion_tokens_total, primary_subject, created_at_ms)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   db.transaction(() => {

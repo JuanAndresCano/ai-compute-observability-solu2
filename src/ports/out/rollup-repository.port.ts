@@ -1,7 +1,7 @@
 export interface HourlyRollupRecord {
   node_id: string;
   gpu_index: number;
-  hour_epoch: number;
+  hour_epoch_s: number;
   gpu_hours_busy: number;
   gpu_hours_idle: number;
   gpu_hours_unavailable: number;

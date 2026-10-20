@@ -147,10 +147,10 @@ describe('Operation 1: ingestMetricBatch (contracts.md Op1)', () => {
       expect(win.long_window_prompt_tokens).toBe(600);
     });
 
-    it('[C1-Q5a] a closed window dispatches ONE snapshot with 33 cells: window averages, both GPUs of server-gpu-01, all LIVE (AMD-18)', async () => {
+    it('[C1-Q5a] a closed window dispatches ONE snapshot with 33 cells: window max temperature and VRAM, average utilization, both GPUs of server-gpu-01, all LIVE (AMD-18)', async () => {
       const w = createWorld();
       const events = [
-        ...[40, 60].map((t) => w.sim.packet({ node_id: 'ws-gpu-05', timestamp_ms: T0, temperature_celsius: t, gpu_utilization_pct: t })),
+        ...[40, 60].map((t) => w.sim.packet({ node_id: 'ws-gpu-05', timestamp_ms: T0, temperature_celsius: t, gpu_utilization_pct: t, vram_used_bytes: t * 1000 })),
         w.sim.packet({ node_id: 'server-gpu-01', gpu_index: 0, timestamp_ms: T0, temperature_celsius: 40 }),
         w.sim.packet({ node_id: 'server-gpu-01', gpu_index: 1, timestamp_ms: T0, temperature_celsius: 80 }),
       ];
@@ -163,7 +163,8 @@ describe('Operation 1: ingestMetricBatch (contracts.md Op1)', () => {
       expect(snap.cells).toHaveLength(33);
       expect(snap.cells.map((c) => `${c.node_id}:${c.gpu_index}`)).toEqual(GPU_SERIES.map((s) => `${s.node_id}:${s.gpu_index}`));
       expect(snap.cells.every((c) => c.freshness === 'LIVE' && c.state === 'HEALTHY')).toBe(true);
-      expect(snap.cells.find((c) => c.node_id === 'ws-gpu-05')).toMatchObject({ temperature_celsius: 50, gpu_utilization_pct: 50, vram_total_bytes: WS_VRAM_BYTES });
+      // temperature and VRAM are banded by threshold, so the cell shows the window MAXIMUM; utilization is the window average
+      expect(snap.cells.find((c) => c.node_id === 'ws-gpu-05')).toMatchObject({ temperature_celsius: 60, vram_used_bytes: 60_000, gpu_utilization_pct: 50, vram_total_bytes: WS_VRAM_BYTES });
       expect(snap.cells.find((c) => c.node_id === 'server-gpu-01' && c.gpu_index === 1)).toMatchObject({ temperature_celsius: 80, vram_total_bytes: 51_539_607_552 });
     });
 
@@ -701,6 +702,24 @@ describe('Operation 2: evaluateAlertRule (contracts.md Op2)', () => {
       expect(w.events.ofType('alert.anomaly.resolved')).toHaveLength(1);
     });
 
+    it('[C2-Q2i] a sustained surge whose ratio fell below 10 (baseline contaminated) does NOT clear the alert while P99 stays above 8,000 ms (AMD-14b)', async () => {
+      const w = createWorld();
+      await evaluate(w, breachWindow());
+      const contaminated = ratioWindow(6240, 47); // ratio 5.2 < 10, P99 9,600 ms
+      const statuses: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        w.clock.advanceBy(CYCLE_MS);
+        statuses.push((await evaluate(w, contaminated)).status);
+      }
+      expect(statuses).toEqual(['TRIGGERED', 'TRIGGERED', 'TRIGGERED', 'TRIGGERED', 'TRIGGERED']);
+      expect(alertRows(w.db)).toHaveLength(1);
+      expect(alertRows(w.db)[0]).toMatchObject({ status: 'TRIGGERED', resolved_at_ms: null, consecutive_clear_cycles: 0 });
+      expect(w.events.ofType('alert.anomaly.resolved')).toHaveLength(0);
+      w.clock.advanceBy(CYCLE_MS);
+      expect((await evaluate(w, calmWindow())).status, 'P99 back under 8,000 ms starts the 3-cycle clearing').toBe('TRIGGERED');
+      expect(alertRows(w.db)[0]!.consecutive_clear_cycles).toBe(1);
+    });
+
     it('[C2-Q2g] two evaluations inside the same 5,000 ms cycle count once', async () => {
       const w = createWorld();
       await evaluate(w, breachWindow());
@@ -925,6 +944,45 @@ describe('Operation 3: buildUtilizationReport (contracts.md Op3)', () => {
       expect(err.body.message).toContain('CS-999');
       expect(err.body.message).toContain('CS-101, CS-480, CS-530, FAC-RES, ALL');
     });
+  });
+});
+
+// ================================================================================================================
+// Heartbeat semantics (Op1 Q2b, AMD-17b): a node whose events are dropped by capacity is alive; a rejected batch is not a heartbeat
+// ================================================================================================================
+describe('Heartbeat semantics of ingestion (Op1 Q2b)', () => {
+  const allBut = (w: World, skip: string[], t: number) => NODE_IDS.filter((n) => !skip.includes(n)).map((n) => w.sim.packet({ node_id: n, timestamp_ms: t }));
+
+  it('[C1-Q2d] a node whose events are tail-dropped by the capacity rule stays HEALTHY: dropped events still count as heartbeats', async () => {
+    const w = createWorld();
+    await w.sut.ingest.ingestMetricBatch(w.sim.batch(NODE_IDS.length, T0, { events: allBut(w, [], T0) }));
+    for (let s = 1; s <= 8; s++) {
+      w.clock.advanceBy(1000);
+      const now = w.clock.nowMs();
+      const filler = Array.from({ length: 9000 }, () => w.sim.packet({ node_id: 'ws-gpu-10', timestamp_ms: now }));
+      await w.sut.ingest.ingestMetricBatch(w.sim.batch(filler.length, now, { events: filler }));
+      const head = [...allBut(w, ['ws-gpu-02', 'ws-gpu-10'], now), ...Array.from({ length: 970 }, () => w.sim.packet({ node_id: 'ws-gpu-10', timestamp_ms: now }))];
+      const tail = Array.from({ length: 1000 }, () => w.sim.packet({ node_id: 'ws-gpu-02', timestamp_ms: now })); // dropped: only 1,000 slots are free
+      const r = await w.sut.ingest.ingestMetricBatch(w.sim.batch(2000, now, { events: [...head, ...tail] }));
+      expect([r.accepted_count, r.dropped_count]).toEqual([1000, 1000]);
+      await w.sut.monitor.tick();
+    }
+    const cell = w.ui.ticks.at(-1)!.cells.find((c) => c.node_id === 'ws-gpu-02')!;
+    expect(cell).toMatchObject({ state: 'HEALTHY', freshness: 'LIVE' });
+  });
+
+  it('[C1-Q2e] a rejected batch is NOT a heartbeat: a node that only sends invalid frames turns STALE', async () => {
+    const w = createWorld();
+    await w.sut.ingest.ingestMetricBatch(w.sim.batch(NODE_IDS.length, T0, { events: allBut(w, [], T0) }));
+    for (let s = 1; s <= 6; s++) {
+      w.clock.advanceBy(1000);
+      const now = w.clock.nowMs();
+      await w.sut.ingest.ingestMetricBatch(w.sim.batch(NODE_IDS.length - 1, now, { events: allBut(w, [SILENT_NODE], now) }));
+      const bad = w.sim.batch(1, now, { events: [w.sim.packet({ node_id: SILENT_NODE, timestamp_ms: now, temperature_celsius: 500 })] });
+      await expectContractError(w.sut.ingest.ingestMetricBatch(bad), { code: 'ERR_INVALID_TELEMETRY_PAYLOAD', http: 422, retryable: false });
+      await w.sut.monitor.tick();
+    }
+    expect(w.ui.ticks.at(-1)!.cells.find((c) => c.node_id === SILENT_NODE)).toMatchObject({ state: 'STALE', freshness: 'STALE_CACHED' });
   });
 });
 
@@ -1202,6 +1260,15 @@ describe('Core domain (pure functions and state machines)', () => {
       ['ratio 1.0, P99 1,200 -> no breach', calmWindow(), false],
     ])('[D-ENG-a] %s', (_l, window, breach) => {
       expect(verdict(window).breach).toBe(breach);
+    });
+
+    it('[D-ENG-f] the verdict separates the trigger (ratio AND P99) from the clearing signal (P99 alone): ratio 5.2 with P99 9,600 ms is no breach but P99 is still exceeded', () => {
+      const v = verdict(ratioWindow(6240, 47));
+      expect(v.breach).toBe(false);
+      expect(v.p99Exceeded).toBe(true);
+      expect(v.spikeRatio!).toBeCloseTo(5.2, 6);
+      expect(verdict(calmWindow()).p99Exceeded).toBe(false);
+      expect(verdict(ratioWindow(13_440, 39)).p99Exceeded, 'exactly 8,000 ms is not exceeded (strict >)').toBe(false);
     });
 
     it('[D-ENG-b] 49 samples suppress, 50 evaluate (and a suppressed verdict can never be a breach)', () => {
