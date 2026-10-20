@@ -10,15 +10,15 @@ Solutioning package for the Unit 4 / Solu-2 workshop: contracts, ports & adapter
 | `planning/detailed-design/ports-and-adapters.md`, `schemas/` | hexagonal map, DDL, DTOs, events, OpenAPI |
 | `reviews/` | Phase 0 audit, Phase 1-2 gate (+ Partner B re-review), `review-test-quality.md` |
 | `test/test-design.md`, `nfr-evidence.md`, `traceability-matrix.md`, `tea-skill-matrix.md` | Phase 3 documents |
-| `test/atdd/observability_contracts.test.ts` | 153 red cases (Operations 1-4, watchdog, core domain, cross-cutting) |
+| `test/atdd/observability_contracts.test.ts` | 157 red cases (Operations 1-4, watchdog, core domain, cross-cutting) |
 | `test/schema/`, `test/architecture/`, `test/harness/` | green suites: physical constraints, hexagon rules, fixture self-tests |
 | `ai-log/decision-log-solu2.md` | AI governance log (DEC-09 … DEC-17) |
 
 ```bash
 nvm use            # Node 20+
 npm ci
-npm test                  # 116 green: fixture self-tests, schema constraints, architecture rules
-npm run test:atdd         # 153 RED on purpose
+npm test                  # 117 green: fixture self-tests, schema constraints, architecture rules
+npm run test:atdd         # 157 RED on purpose
 npm run test:atdd:guard   # fails if any ATDD case passes, is skipped, or is red for another reason than NotImplementedError
 npm run trace:check       # traceability matrix vs code
 npm run readiness:check   # epics.md structure, dependencies, FR/NFR/AD coverage, every test owned by one story
@@ -26,3 +26,24 @@ npm run typecheck
 npm run ci                # all of the above
 STORM_SECONDS=900 npm run test:atdd:guard   # the 15-minute storm (NFR-01), nightly
 ```
+
+## For the reviewing partner (clone and verify in 10 minutes)
+
+1. **Prerequisites:** Node 20 or newer (`.nvmrc`), npm, git. No GPU, no database server, no network after `npm ci`. Works on Linux, macOS, WSL and Windows (paths are normalised in the scripts).
+2. **Install and run everything:**
+   ```bash
+   git clone git@github.com:JuanAndresCano/ai-compute-observability-solu2.git
+   cd ai-compute-observability-solu2
+   npm ci
+   npm run ci
+   ```
+   Expected tail: `117 passed`, `136 test ids traced`, `READINESS CHECK: no structural problem found`, `157 ATDD cases - 157 red for the right reason, 0 ... not red`.
+   `npm audit` reports 6 dev-dependency warnings (vitest / vite / esbuild); they are known and not fixed on purpose.
+3. **See the red suite fail on purpose:** `npm run test:atdd` (157 failures, every one `NotImplementedError`).
+4. **Read in this order:** `planning/readiness-gate-report.md` (verdict and what is pending) → `ai-log/decision-log-solu2.md` DEC-12..18 → `reviews/review-detailed-design.md` sections 6.1-6.4 → `planning/detailed-design/contracts.md` → `planning/epics.md` → `test/test-design.md`.
+5. **What is waiting for you (Partner A):**
+   * Confirm or change AMD-14 (alarm baseline) and AMD-14b, AMD-15..20 (see DEC-14, DEC-16, DEC-18). Each one lists where it lives and what reverting costs.
+   * Independent re-review of the test suite: `reviews/review-test-quality.md`, action TQ-A.
+   * Sign the review and gate lines marked `PENDING`.
+   * If you change an AMD, edit the artifact, re-run `npm run ci`, and re-judge `planning/readiness-gate-report.md`.
+6. **Optional:** the sprint file was generated with the `bmad-sprint-planning` script, which lives in `task-first-solution/.claude/skills/bmad-sprint-planning/scripts/sprint_plan.py` (outside this repo, needs `ruamel.yaml`). `implementation-artifacts/sprint-status.yaml` is committed, so you do not need to run it.
