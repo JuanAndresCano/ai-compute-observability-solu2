@@ -88,8 +88,8 @@ export interface FleetCellDTO {
   gpu_index: number;
   state: NodeStateType;
   freshness: CellFreshnessType;      // STALE_CACHED iff state !== 'HEALTHY' (last known values shown)
-  temperature_celsius: number;       // average over the closed window, or last known value
-  vram_used_bytes: number;           // last value
+  temperature_celsius: number;       // MAXIMUM over the closed window (threshold-banded metric), or last known value
+  vram_used_bytes: number;           // MAXIMUM over the closed window (threshold-banded metric), or last known value
   vram_total_bytes: number;
   gpu_utilization_pct: number;       // average over the closed window, or last known value
 }
@@ -97,7 +97,7 @@ export interface FleetCellDTO {
 export interface FleetSnapshotDTO {
   bucket_start_ms: number;           // start of the closed 250 ms window this snapshot summarises
   cells: FleetCellDTO[];             // 33 cells ordered by node_id then gpu_index; [] only if no node is registered (UX Empty)
-  storm_mode: boolean;               // accepted raw events in the 1,000 ms before the window closed > 1,000
+  storm_mode: boolean;               // raw events that ARRIVED (accepted or dropped by capacity) in the 1,000 ms before the window closed > 1,000
   dropped_total: number;             // cumulative dropped events since start
 }
 
@@ -224,7 +224,7 @@ export interface NodeRollupDTO {
 }
 
 export interface PeakContentionWindowDTO {
-  hour_start_ms: number;   // rollup hour_epoch * 1000
+  hour_start_ms: number;   // rollup hour_epoch_s * 1000
   utilization_pct: number; // 100 * busy / (busy + idle + unavailable) over the scanned GPUs in that hour
 }
 

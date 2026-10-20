@@ -223,7 +223,7 @@
 - **Depends on:** 2.1, 2.2.
 - **Contract clauses:** Op1 Q2c (`storm_mode`), I1, I2; PRD FR-05 outputs.
 - **Files:** `src/application/services/telemetry-ingestion.service.ts`, `src/adapters/sim/simulated-telemetry-gen.ts` (storm generator), `ui/heatmap/StormIndicator.tsx`, `bench/ingest-storm.ts`.
-- **Schema / DTO:** `FleetSnapshotDTO.storm_mode`, `FleetSnapshotDTO.dropped_total`.
+- **Schema / DTO:** `FleetSnapshotDTO.storm_mode` (counts arrived events, AMD-18b), `FleetSnapshotDTO.dropped_total`.
 - **ATDD:** `C1-EDGE-a, C1-Q5b`.
 - **UI surface:** header shows "Storm Mode Active: Downsampling 5,000 ev/s -> 4 Hz Buckets" while `storm_mode` is true.
 - **Gherkin:**
@@ -249,8 +249,8 @@
 - **Depends on:** 1.2.
 - **Contract clauses:** Op1 Concurrency / idempotency, Q2 (`INSERT OR IGNORE` of duplicate points).
 - **Files:** `src/adapters/db/sqlite-telemetry-repo.ts` (`registerBatch`, `commitBuckets`, pruning of old batch ids), `src/application/services/telemetry-ingestion.service.ts`.
-- **Schema / DTO:** `MetricBatchDTO.batch_id`; table `ingested_batches` (AMD-19: `INSERT OR IGNORE`, 1-hour replay window).
-- **ATDD:** `C1-CON-a, C1-CON-b, C1-Q2b, S-01f`.
+- **Schema / DTO:** `MetricBatchDTO.batch_id`; table `ingested_batches` with `idx_ingested_batches_time` (AMD-19: `INSERT OR IGNORE`, 1-hour replay window, indexed pruning).
+- **ATDD:** `C1-CON-a, C1-CON-b, C1-Q2b, S-01f, S-01g`.
 - **UI surface:** none.
 - **Gherkin:**
   ```gherkin
@@ -331,10 +331,10 @@
 - **Traceability:** FR-02 (cold start, hysteresis); UX-SC-02 edge case and Error state; risk R-08, R-03.
 - **Binding invariants:** AD-03 (INV-03), AD-05.
 - **Depends on:** 3.2.
-- **Contract clauses:** Op2 Q2 steps 1, 4, 5, I1 (recurrence), Time (1,000 ms loop vs 5,000 ms cycle); AMD-2, AMD-11, AMD-17.
+- **Contract clauses:** Op2 Q2 steps 1, 4, 5, I1 (recurrence), Time (1,000 ms loop vs 5,000 ms cycle); AMD-2, AMD-11, AMD-14b (clearing counts P99 <= 8,000 ms whatever the ratio), AMD-17.
 - **Files:** `src/application/services/alert-evaluation.service.ts`, `src/adapters/db/sqlite-alert-repo.ts` (`countClearCycle`, `resetClearCounter`), `ui/alerts/AlertBanner.tsx` ("evaluation paused").
 - **Schema / DTO:** `operational_alerts.consecutive_clear_cycles`, `last_cycle_index`; `status = SUPPRESSED_COLD_START`.
-- **ATDD:** `C2-Q2c, C2-Q2d, C2-Q2e, D-ENG-b, C2-Q4b, C2-Q2f, C2-Q2g, C2-Q2h, C2-I1b, C2-I1d, S-05c, S-05d, S-05f, S-05g, S-05h`.
+- **ATDD:** `C2-Q2c, C2-Q2d, C2-Q2e, D-ENG-b, C2-Q4b, C2-Q2f, C2-Q2g, C2-Q2h, C2-Q2i, D-ENG-f, C2-I1b, C2-I1d, S-05c, S-05d, S-05f, S-05g, S-05h`.
 - **UI surface:** alert banner Error state: "evaluator degraded: insufficient sample buffer (< 50 events)".
 - **Gherkin:**
   ```gherkin
@@ -348,6 +348,12 @@
     Given an active alert and calm evaluations at +5 s and +10 s (counter 2), then a breach at +11 s
     Then the counter is 0; after three more calm cycles status is CLEARED with resolved_at_ms = the third cycle
     And a restart of the process in between loses nothing
+
+  Scenario: A long surge pollutes the baseline but does not clear the alert
+    Given an active alert and evaluations whose spike ratio fell to 5.2 while P99 stays at 9,600 ms
+    When five 5-second cycles pass
+    Then status stays TRIGGERED, the clearing counter stays 0 and no alert.anomaly.resolved event exists
+    And the first cycle with P99 under 8,000 ms starts the 3-cycle clearing
   ```
 - **Definition of Done:** global DoD.
 
@@ -357,10 +363,10 @@
 - **Traceability:** FR-03, FR-01 (STALE_CACHED), NFR-04; UX-SC-03; risk R-04.
 - **Binding invariants:** AD-04 (INV-04).
 - **Depends on:** 1.2.
-- **Contract clauses:** Op1 Q2b (every accepted event is a heartbeat), Q2c (freshness); Op4 Time (state boundaries); AD-04 state machine; AMD-17 (`MonitoringPort.tick()` every 1,000 ms).
+- **Contract clauses:** Op1 Q2b (every accepted or capacity-dropped event is a heartbeat; a rejected batch is not, AMD-17b), Q2c (freshness); Op4 Time (state boundaries); AD-04 state machine; AMD-17 (`MonitoringPort.tick()` every 1,000 ms).
 - **Files:** `src/domain/services/heartbeat-watchdog.ts`, `src/application/services/node-monitor.service.ts`, `src/ports/in/monitoring.port.ts`, `src/adapters/sim/scheduler.ts`, `ui/heatmap/FleetHeatmap.tsx` (amber/silent cells with text labels).
 - **Schema / DTO:** `node_heartbeats`, `chk_watchdog_hysteresis`; `FleetCellDTO.state`, `freshness`.
-- **ATDD:** `W-1, W-2, W-3, W-4, D-WD-a, D-WD-b, S-04a, S-04b, C1-Q5c`.
+- **ATDD:** `W-1, W-2, W-3, W-4, D-WD-a, D-WD-b, S-04a, S-04b, C1-Q5c, C1-Q2d, C1-Q2e`.
 - **UI surface:** heatmap cell states with icon + label (`⏱ Silent`), never colour alone.
 - **Gherkin:**
   ```gherkin

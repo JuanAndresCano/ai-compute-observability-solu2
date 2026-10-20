@@ -110,7 +110,7 @@ Lens: adversarial + edge-case hunter, run by the Test Lead before writing any te
 
 | Finding | Lens | Severity | Defect | Triage | Fix |
 |:-:|:-:|:-:|---|:-:|---|
-| **REV-DET-16** | Edge-Case | HIGH | With the short window inside the long window (AMD-9), `Throughput(short) / Throughput(long) = 10·S/L <= 10.0`: the 10x alarm can only fire if all tokens of the last 300 s fell in the last 30 s. The same flaw is in `ARCHITECTURE.md` AD-03 from Plan-2. Found while building the data for `C2-Q1a`. | **ACCEPT - APPLIED PROVISIONALLY (AMD-14), pending confirmation by both partners** | Baseline = `(long_window_prompt_tokens - short_window_prompt_tokens) / 270` (`contracts.md` Op2 Q2 step 2 and Time, `ARCHITECTURE.md` section 2.3, `dto.ts`). Decision record: DEC-14. |
+| **REV-DET-16** | Edge-Case | HIGH | With the short window inside the long window (AMD-9), `Throughput(short) / Throughput(long) = 10·S/L <= 10.0`: the 10x alarm can only fire if all tokens of the last 300 s fell in the last 30 s. The same flaw is in `ARCHITECTURE.md` AD-03 from Plan-2. Found while building the data for `C2-Q1a`. | **ACCEPT (Partner B, 2026-10-26) - AMD-14 + AMD-14b; Partner A to confirm** | Baseline = `(long_window_prompt_tokens - short_window_prompt_tokens) / 270` (`contracts.md` Op2 Q2 step 2 and Time, `ARCHITECTURE.md` section 2.3, `dto.ts`). Decision record: DEC-14. |
 
 ### 6.3 Defects found while closing the Phase 4 readiness audit (2026-10-26)
 
@@ -128,3 +128,12 @@ The audit question "could a developer implement these stories without inventing 
 | **REV-DET-24** | Edge-Case | MEDIUM | `hour_epoch` unit was ambiguous (seconds vs ms); `NodeRollupDTO` average temperature/utilization and `SubjectBreakdownDTO.allocated_gpu_hours` / `share_pct` could not be computed from `rollup_hourly_metrics` (TG-2, TG-3). | **ACCEPT - FIXED (AMD-20)** | Unit documented in DDL and contract; the two uncomputable fields removed; `allocated_gpu_hours` and token-based `share_pct` defined and asserted in `C3-Q1a`. |
 | **REV-DET-25** | Adversarial | LOW | Two sources of node state: `cluster_nodes.current_state` and `node_heartbeats.state` (TG-5). | **ACCEPT - FIXED** | DDL comment: `node_heartbeats.state` is the live source; `cluster_nodes.current_state` is a seed value only. |
 | **REV-DET-26** | Edge-Case | MEDIUM | PRD FR-02 runs the evaluation every 1,000 ms; the contract's hysteresis counts 5,000 ms cycles; nobody owned the loop (TG-9). | **ACCEPT - FIXED (AMD-17)** | `MonitoringPort.tick()` every 1,000 ms; counter advances once per 5,000 ms cycle; story 3.4. |
+
+### 6.4 Defects found while reviewing the trade-offs (2026-10-26)
+
+| Finding | Lens | Severity | Defect | Triage | Fix |
+|:-:|:-:|:-:|---|:-:|---|
+| **REV-DET-27** | Edge-Case | HIGH | With a baseline that excludes only the short window, a surge lasting > 30 s raises the baseline and drops the ratio below 10 while the incident continues; clearing on "no breach" would resolve a live incident. | **ACCEPT - FIXED (AMD-14b)** | Clearing counts cycles with P99 <= 8,000 ms regardless of the ratio; `C2-Q2i`, `D-ENG-f`. |
+| **REV-DET-28** | Edge-Case | MEDIUM | Events dropped by the capacity rule recorded no heartbeat: a live node at the end of a batch could be flagged STALE / SILENT_TIMEOUT. | **ACCEPT - FIXED (AMD-17b)** | Dropped events are heartbeats; rejected batches are not; `C1-Q2d`, `C1-Q2e`. |
+| **REV-DET-29** | Adversarial | MEDIUM | Heatmap cells showed the window average of temperature and VRAM, hiding short peaks the PRD bands by threshold; `storm_mode` counted accepted events instead of the PRD's arrival rate. | **ACCEPT - FIXED (AMD-18b)** | Window maximum for both; arrivals for the storm flag; `C1-Q5a`. |
+| **REV-DET-30** | Adversarial | LOW | Pruning `ingested_batches` every window would scan the table; `hour_epoch` hid a seconds-vs-milliseconds unit. | **ACCEPT - FIXED (AMD-19, AMD-20)** | `idx_ingested_batches_time` (`S-01g`); column renamed `hour_epoch_s`. |
