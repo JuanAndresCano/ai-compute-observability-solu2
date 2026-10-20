@@ -24,7 +24,7 @@ The architecture decouples high-frequency telemetry ingestion ($5,000\text{ even
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │                         LOCAL INGESTION DAEMON / MOCK SERVER                           │
 │  - Event Streaming Pipeline (ws://localhost:8080/v1/telemetry/stream)                  │
-│  - Fixture Loader (Historical 7-Day Hourly Rollups: 168h x 32 nodes)                  │
+│  - Fixture Loader (Historical 7-Day Hourly Rollups: 168h x 33 GPUs)                  │
 │  - Heartbeat Injector & Fault Simulator (ws-gpu-22 silence, 10x token spike injection) │
 └──────────────────────────────────────────┬─────────────────────────────────────────────┘
                                            │ Binary / JSON WebSocket Frames
@@ -35,7 +35,7 @@ The architecture decouples high-frequency telemetry ingestion ($5,000\text{ even
 │  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
 │  │                    DEDICATED WEB WORKER (`telemetry-worker.js`)                  │  │
 │  │  - Bucket Decimation Pipeline (250 ms time buckets / 4 Hz tick)                  │  │
-│  │  - Pre-Allocated Ring Buffer (`Float32Array` circular buffer, 7,200 slots/node)  │  │
+│  │  - Pre-Allocated Ring Buffer (`Float32Array` circular buffer, 7,200 slots/GPU series)  │  │
 │  │  - Anomaly Evaluation Engine (30s sliding window vs 300s baseline, T-Digest P99) │  │
 │  │  - Node Heartbeat Watchdog & Hysteresis State Machine (15.0s timeout for ws-22)  │  │
 │  └───────────────────────────────────────┬──────────────────────────────────────────┘  │
@@ -72,9 +72,9 @@ The architecture decouples high-frequency telemetry ingestion ($5,000\text{ even
 ### 2.2 Pre-Allocated Circular Ring Buffer (`TelemetryRingBuffer`)
 * **Role:** Stores high-resolution metric histories for live sparklines and forensic inspection without incurring Garbage Collector (GC) thrashing.
 * **Structure:** Implemented with fixed-size `Float32Array` typed arrays:
-  * Capacity: 7,200 samples per metric per node (covers exactly 30 minutes at $4\text{ Hz}$).
+  * Capacity: 7,200 samples per metric per GPU series (covers exactly 30 minutes at $4\text{ Hz}$).
   * Total metrics tracked per node: 6 (Temperature, VRAM Used, GPU Util %, Prompt Tokens/s, Completion Tokens/s, Request Latency ms).
-  * Memory footprint: $32\text{ nodes} \times 6\text{ metrics} \times 7,200\text{ slots} \times 4\text{ bytes} \approx 5.53\text{ MB}$.
+  * Memory footprint: $33\text{ GPU series} \times 6\text{ metrics} \times 7,200\text{ slots} \times 4\text{ bytes} = 5,702,400\text{ bytes} \approx 5.70\text{ MB}$ (31 workstation GPUs + 2 GPUs of `server-gpu-01`, each stored independently; amended from 32 nodes / 5.53 MB, AMD-4).
   * Write pointer wraps modulo 7,200 (`ptr = (ptr + 1) % 7200`). Allocation is performed once at startup; zero heap allocations during streaming.
 
 ### 2.3 Anomaly Detection & $P_{99}$ Latency Engine
@@ -97,7 +97,7 @@ The architecture decouples high-frequency telemetry ingestion ($5,000\text{ even
 
 ### 2.5 Executive 7-Day Rollup Store
 * **Role:** Delivers instantaneous ($\le 1.5\text{ s}$) executive reporting for Department Management (Scenario 4).
-* **Mechanism:** Does not scan millions of raw telemetry points. Operates on pre-aggregated hourly rollups ($168\text{ buckets}$ per node covering 7 days). Each bucket contains: `gpu_hours_busy`, `gpu_hours_idle`, `prompt_tokens_by_subject`, `completion_tokens_by_subject`.
+* **Mechanism:** Does not scan millions of raw telemetry points. Operates on pre-aggregated hourly rollups ($168\text{ buckets}$ per GPU covering 7 days). Each bucket contains: `gpu_hours_busy`, `gpu_hours_idle`, `gpu_hours_unavailable` (the three sum to 1.0 ± 0.001), `prompt_tokens_by_subject`, `completion_tokens_by_subject`.
 
 ---
 
@@ -109,7 +109,7 @@ interface NodeTelemetryPacket {
   node_id: string;              // "ws-gpu-01" .. "ws-gpu-31", "server-gpu-01"
   gpu_index: number;            // 0 for workstations; 0 or 1 for central server
   timestamp_ms: number;         // Unix epoch in milliseconds
-  temperature_celsius: number;  // 20.0 to 115.0
+  temperature_celsius: number;  // -20.0 to 120.0 (sensor validity range; single source: contracts.md Op1 P1)
   vram_used_bytes: number;      // 0 to 25,769,803,776 (24GB) or 51,539,607,552 (48GB)
   vram_total_bytes: number;     // 25,769,803,776 or 51,539,607,552
   gpu_utilization_pct: number;  // 0.0 to 100.0
@@ -268,7 +268,7 @@ To prevent silent system degradation, resource exhaustion, or contract drift, al
 * **Status:** [ADOPTED]
 * **Binds:** `TelemetryRingBuffer` data structure within `telemetry-worker.js`.
 * **Prevents:** Memory leak accumulation and JavaScript V8 garbage collection pauses exceeding $16\text{ ms}$ caused by repeated object allocations.
-* **Rule:** Time-series telemetry histories shall be stored in statically sized typed arrays (`Float32Array`) of exactly $7,200\text{ entries}$ per metric per node ($30\text{ minutes}$ depth at $4\text{ Hz}$). Insertion shall overwrite historical entries using an integer pointer incremented modulo $7,200$. Dynamic array resizing (`Array.push`, `Array.concat`, `Array.filter`) is strictly barred from the streaming path.
+* **Rule:** Time-series telemetry histories shall be stored in statically sized typed arrays (`Float32Array`) of exactly $7,200\text{ entries}$ per metric per GPU series ($30\text{ minutes}$ depth at $4\text{ Hz}$). Insertion shall overwrite historical entries using an integer pointer incremented modulo $7,200$. Dynamic array resizing (`Array.push`, `Array.concat`, `Array.filter`) is strictly barred from the streaming path.
 * **Trade-off:** Telemetry history older than $30\text{ minutes}$ is permanently overwritten in client memory; long-term historical analyses must rely exclusively on the pre-aggregated 1-hour rollup store.
 
 ### AD-03: Dual Sliding-Window Cold-Start Anomaly Suppression
@@ -296,7 +296,7 @@ To prevent silent system degradation, resource exhaustion, or contract drift, al
 * **Status:** [ADOPTED]
 * **Binds:** `ExecutiveReportService` and `LocalRollupRepository`.
 * **Prevents:** Browser memory overflow and client computation times exceeding $1.5\text{ s}$ during 7-day executive query evaluation.
-* **Rule:** The 7-day executive summary shall query only pre-calculated $1\text{-hour rollup records}$ ($168\text{ intervals} \times 32\text{ nodes} = 5,376\text{ records}$). Traversal, iteration, or scanning of raw streaming telemetry points for historical reporting spans $> 30\text{ minutes}$ is strictly blocked.
+* **Rule:** The 7-day executive summary shall query only pre-calculated $1\text{-hour rollup records}$ ($168\text{ intervals} \times 33\text{ GPUs} = 5,544\text{ records}$). Traversal, iteration, or scanning of raw streaming telemetry points for historical reporting spans $> 30\text{ minutes}$ is strictly blocked.
 * **Trade-off:** Historical reporting resolution is bounded to $1\text{-hour intervals}$; sub-hourly utilization peaks occurring 5 days prior cannot be inspected in the executive view.
 
 ### AD-07: Isolated Standalone Fixture-Driven Execution
