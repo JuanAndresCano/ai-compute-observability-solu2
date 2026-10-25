@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  observability-console:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: observability-console
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=8080
+      - DB_PATH=:memory:
+      - LOG_LEVEL=info
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped

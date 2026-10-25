@@ -8,6 +8,8 @@
     "node": ">=20"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/src/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config test/vitest.harness.config.ts",
     "test:atdd": "vitest run --config test/vitest.atdd.config.ts",
