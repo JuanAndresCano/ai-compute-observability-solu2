@@ -18,7 +18,9 @@
 | **DEC-10** | Phase 1 (Contracts) | Anomaly Alert Deduplication & Error Representation | Use informal strings for exceptions and in-memory `Set` with `setTimeout` for alert debouncing. | **REJECTED AI PROPOSAL:** Mandated Typed Error Catalog, canonical HTTP/WS codes, and physical SQLite UNIQUE index on `incident_key` with hysteresis. | **ADOPTED** | **Partner A (Juand)** |
 | **DEC-11** | Phase 2 (Detailed Design) | Atomic Contention Serialization vs SELECT-then-UPDATE & DTO Decoupling | Pass Fastify request objects directly into ports and execute `SELECT then UPDATE` in application code. | **REJECTED AI PROPOSAL:** Enforced pure primitive DTOs in `dto.ts` and atomic SQLite partial unique index with `INSERT OR IGNORE`. | **ADOPTED** | **Partner A (Juand)** |
 
-*(Note: Entries DEC-12 to DEC-14 will be recorded during Phase 3 and 4 by Partner B).*
+| **DEC-12** | Phase 1–2 re-review (Partner B) | Defects in contracts/DDL/DTO found by the Test Lead; options chosen; sign-off governance | AI listed 9 defects with ≥2 options each and a recommendation | **ACCEPT 7 / MODIFY 1 / REJECT 1:** options chosen per item (see entry); item 4 challenged and re-analysed; pre-filled Partner B approvals rejected and reset to PENDING | **ADOPTED** | **Partner B** |
+
+*(Note: entries for Phase 3 and 4 (test strategy, ATDD, gate drill) continue from DEC-13 and are recorded by Partner B.)*
 
 ---
 
@@ -88,3 +90,33 @@
   - `planning/detailed-design/schemas/dto.ts`.
   - `reviews/review-detailed-design.md` (R4, R5, REV-DET-02).
 * **Pair Attribution:** Juand (Partner A — Architect Lead).
+
+---
+
+### Entry DEC-12: Partner B Re-Review of the Phase 1–2 Package — Defect Triage, Options and Sign-Off Governance
+* **Timestamp:** 2026-10-26
+* **Lifecycle Phase:** Phase 1–2 amendment, performed by the Test Lead at the start of Phase 3 (feeds back to Phase 0 gaps)
+* **AI Persona / Skill Invoked:** Murat-style test-architect review (adversarial + edge-case lens, read-only) followed by an amendment pass; executed with Claude Code
+* **Trigger Prompt / Context:** Partner B asked the AI to verify that Partner A's handover was correct before any test is written, to list every defect with a recommended fix and at least one alternative, and to apply the fixes the human chose.
+* **AI Generated Output:** Nine defects, each with a recommendation, an alternative and the reason for the recommendation (full table in `reviews/review-detailed-design.md` §6). The AI also stated, wrongly, that the error catalog would end with 9 codes; applying the three removals the human accepted produced 8, and the artifacts say 8.
+* **Human Decisions (Partner B):**
+
+| # | Defect | Options offered | Decision | Reason given or implied |
+|:---:|---|---|:---:|---|
+| 1 | Overflow: 429 vs `dropped_count` | A tail-drop + visible `dropped_count` (recommended); B reject whole batch | **ACCEPT A** | Annex A asks for a visible dropped-count in the P0 storm test. |
+| 2 | Cold start: error 412 vs status | A result status (recommended); B keep 412 | **ACCEPT A** | `ARCHITECTURE.md` AD-03 already specified the status; an expected state is not a client error. |
+| 3 | `incident_key` embeds the hour | A index on `(trigger_rule, node_id)` + unique `incident_key` (recommended); B key without hour | **ACCEPT A** | Physical dedupe without losing per-incident audit identity. |
+| 4 | Ring buffer 5.53 MB with 33 GPUs | Single fix offered; human asked "could it be adjusted to fit the lab?" | **MODIFY → re-analysed, then ACCEPT 5,702,400 B** | The AI checked: the 5.53 MB figure exists only in our own documents (PRD bound is 128 MB, NFR-05). Fitting it would cost 30-minute depth (6,981 slots) or a 195-series split saving 86 KB. The human accepted the exact 33-series figure. |
+| 5 | Catalog codes without triggers | A narrow regex, delete 3 codes' dead paths, bind `ERR_DATABASE_UNAVAILABLE` (recommended); B keep `ERR_UNKNOWN_NODE_ID` with a registry lookup | **ACCEPT A** | Fleet is fixed at 32 nodes by the PRD; fewer codes, smaller test surface. |
+| 6 | Wrong NFR citations | A fix citations, label design budgets (recommended); B add NFR-09/10 to the PRD | **ACCEPT A** | PRD stays untouched except through triaged findings. |
+| 7 | Temperature range drift | Single option | **ACCEPT** | Obvious single-sourcing. |
+| 8 | Hourly sum equality vs `<= 1.0001` | A relax I2; B add `gpu_hours_unavailable` + equality CHECK (recommended) | **ACCEPT B** | A node in `SILENT_TIMEOUT` (ws-gpu-22) must not be reported as idle. |
+| 9 | `evaluateAlertRule` has no sample data | A window DTO carries aggregated data (recommended); B `MetricWindowPort` | **ACCEPT A** | Keeps the evaluator a pure function and the ATDD seedable without the ingestion path. |
+| G | Pre-filled "Partner B APPROVED/SIGNED" lines in Phase 0 and Phase 1–2 reviews | AI proposed marking them PENDING | **REJECT the pre-filled approvals** | The approval belongs to Partner B and is given only after reviewing the amended artifacts. |
+
+* **Human Action Taken:** Chose the options above; required that the defects be fixed before Phase 3; created the repository. The AI applied the amendments as separate commits (contracts, schemas, architecture, governance) so Partner A can review each diff.
+* **Verification performed by the AI before claiming the fixes:** DDL executed on SQLite 3.45.1 (positive and negative inserts for INV-05, INV-06 and the `node_id` CHECK, and the `ON CONFLICT` upsert returning 1 then 0 rows); `dto.ts` compiled under `tsc --strict`; `openapi.yaml` parsed with 0 unresolved `$ref`; grep confirmed no stale reference to removed codes, the 32-series figure or the old index name outside historical entries.
+* **Open items not fixed (need a pair decision):** OBS-1..OBS-4 in `reviews/review-detailed-design.md` §6.1.
+* **Artifacts Changed:** `planning/detailed-design/contracts.md` (v1.1), `ports-and-adapters.md`, `schemas/001_observability_schema.sql`, `schemas/dto.ts`, `schemas/openapi.yaml`, `schemas/events.md`, `planning/ARCHITECTURE.md`, `reviews/review-arch-implementability.md`, `reviews/review-detailed-design.md`.
+* **Note on historical entries:** DEC-10 and DEC-11 describe `UNIQUE(incident_key)` / `idx_unique_active_incident`; that wording is kept as the record of what was decided on 2026-10-19 and is superseded by AMD-3.
+* **Pair Attribution:** Partner B (Test Lead) decided; Partner A (Juand) to be informed and to confirm the amendments to his artifacts.

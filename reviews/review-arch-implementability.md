@@ -5,7 +5,7 @@
 **Review Lens:** Adversarial Implementability Audit (`bmad-review --lens adversarial`)  
 **Reviewers:** Juand (Partner A — Architect Lead) & Partner (Partner B — Test Lead)  
 **Date:** 2026-10-19  
-**Status:** TRIAGED & SIGNED OFF
+**Status:** TRIAGED — Partner A signed; **Partner B approval PENDING** (the 2026-10-19 Partner B approval was pre-filled by Partner A and is withdrawn; see DEC-12)
 
 ---
 
@@ -52,7 +52,7 @@ Under the AI Governance Level 3 rules, any ambiguity left in the architecture do
 ### GAP-04: Database-Level Physical Constraints for Alert Cooldown
 * **Class:** Missing NOT NULL / CHECK / UNIQUE Physical Enforcements.
 * **Analysis:** The Seed Table for Module 11 states: *"alert fires once per incident until cleared; alerts.incident_key UNIQUE"*. The existing architecture described this in English prose but provided no DDL schema enforcing it at the storage engine level.
-* **Resolution Strategy:** Create table `operational_alerts` in `001_observability_schema.sql` with `incident_key TEXT NOT NULL`, a partial unique index `CREATE UNIQUE INDEX idx_active_alerts ON operational_alerts(node_id, trigger_rule) WHERE resolved_at IS NULL`, and foreign keys to `cluster_nodes`.
+* **Resolution Strategy:** Create table `operational_alerts` in `001_observability_schema.sql` with `incident_key TEXT NOT NULL`, a partial unique index `CREATE UNIQUE INDEX idx_active_alerts ON operational_alerts(node_id, trigger_rule) WHERE resolved_at IS NULL` *(restored by AMD-3 as `idx_unique_active_alert` on `(trigger_rule, node_id)`; the v1.0 DDL had keyed it on `incident_key`)*, and foreign keys to `cluster_nodes`.
 
 ### GAP-05: Backend Contracts for UI Screen States
 * **Class:** UI State without Backend Contract Binding.
@@ -62,7 +62,7 @@ Under the AI Governance Level 3 rules, any ambiguity left in the architecture do
 ### GAP-06: Telemetry Storm Drop Policy & Memory Safeguards
 * **Class:** Unbounded Queue / Missing Degradation Semantics.
 * **Analysis:** Under the mandatory edge case (5,000 ev/s burst), if the ingestion pipeline suffers CPU throttling, memory must not exceed $128\text{ MB}$. The architecture dictates a 250 ms decimation window, but does not define what happens if the internal ring queue reaches maximum capacity.
-* **Resolution Strategy:** Define an explicit buffer capacity ($10,000\text{ raw events}$ ceiling). Once saturated, the ingestion port drops lowest-priority telemetry points in a deterministic FIFO manner while incrementing `dropped_events_count`, which is exposed in `IngestionResultDTO`.
+* **Resolution Strategy:** Define an explicit buffer capacity ($10,000\text{ raw events}$ ceiling). Once saturated, the ingestion port drops the excess events and increments `dropped_events_count`, which is exposed in `IngestionResultDTO`. *(Superseded by AMD-1: the excess is the tail of the batch, tail-drop; `ERR_BUFFER_OVERFLOW` is raised only when 0 slots are free.)*
 
 ### GAP-07: Canonical Identifier Formats
 * **Class:** Missing ID Format / Uncorrelated Entities.
@@ -87,5 +87,5 @@ Under the AI Governance Level 3 rules, any ambiguity left in the architecture do
 ```
 Reviewed and Approved by:
 Partner A (Juand - Architect Lead): [APPROVED - 2026-10-19]
-Partner B (Partner - Test Lead):     [APPROVED - 2026-10-19]
+Partner B (Test Lead):               [PENDING — to be signed by Partner B after reviewing the v1.1 amendments]
 ```

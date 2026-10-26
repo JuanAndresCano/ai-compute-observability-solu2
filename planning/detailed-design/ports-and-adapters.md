@@ -1,9 +1,9 @@
 # Hexagonal Architecture Mapping (Ports & Adapters)
 ## Module 11: AI Infrastructure Observability Console
 **Document Path:** `planning/detailed-design/ports-and-adapters.md`  
-**Status:** APPROVED (Phase 2 Baseline)  
+**Status:** AMENDED v1.1 (AMD-9: sliding-window assembler added) — approval by Partner B: PENDING  
 **Author:** Juand (Partner A — Architect Lead)  
-**Reviewed by:** Partner B (Test Lead)  
+**Reviewed by:** Partner B (Test Lead) — review in progress (`reviews/review-detailed-design.md` §6)  
 **Architectural Pattern:** Hexagonal Architecture (Alistair Cockburn / Ports and Adapters)  
 
 ---
@@ -19,6 +19,7 @@ Every functional file within Module 11 belongs to exactly one Hexagonal layer an
 | `api/routes/alerts-http.ts` | **Driving Adapter (HTTP / SSE)** | Inbound Port only (`AlertEvaluationPort`), Fastify framework | **AD-03, AD-05**, `evaluateAlertRule` |
 | `ports/in/telemetry-ingestion.port.ts` | **Inbound Port** | Primitive DTOs only (`MetricBatchDTO`, `IngestionResultDTO`) | **AD-01**, Contract Op 1 |
 | `ports/in/alert-evaluation.port.ts` | **Inbound Port** | Primitive DTOs only (`AlertRuleDTO`, `AlertEvaluationDTO`) | **AD-03, AD-05**, Contract Op 2 |
+| `application/services/sliding-window-assembler.ts` | **Application Service (implements `AlertEvaluationPort`)** | Outbound ports (`ClockPort`), pure domain accumulators; builds `SlidingWindowDTO` from the Op1 histograms and token counters, then calls `AnomalyDetectionEngine` | **AD-03**, AMD-9, Contract Op 2 |
 | `ports/in/reporting.port.ts` | **Inbound Port** | Primitive DTOs only (`ReportQueryDTO`, `ExecutiveReportDTO`) | **AD-06**, Contract Op 3 |
 | `domain/services/bucket-decimator.ts` | **Core Domain (Pure)** | Pure domain models only (`TelemetryRingBuffer`, `MetricBucket`) | **AD-01, AD-02**, INV-01, INV-02 |
 | `domain/services/anomaly-detector.ts` | **Core Domain (Pure)** | Pure domain models only (`HistogramP99`, `AnomalyRule`) | **AD-03**, INV-03 |
@@ -67,6 +68,7 @@ graph TD
         IPort_Ingest["[Inbound Port]<br>TelemetryIngestionPort<br>(ports/in/telemetry-ingestion.port.ts)"]
         IPort_Report["[Inbound Port]<br>ReportingPort<br>(ports/in/reporting.port.ts)"]
         IPort_Alert["[Inbound Port]<br>AlertEvaluationPort<br>(ports/in/alert-evaluation.port.ts)"]
+        Assembler["[Application Service]<br>SlidingWindowAssembler<br>(application/services/sliding-window-assembler.ts)"]
     end
 
     subgraph Core_Domain ["Core Domain & Business Invariants (Pure Typescript)"]
@@ -100,7 +102,9 @@ graph TD
     %% Inbound Port Implementations
     IPort_Ingest -->|Delegates to| Decimator
     IPort_Report -->|Delegates to| OPort_RollupRepo
-    IPort_Alert -->|Delegates to| AnomalyEngine
+    IPort_Alert -->|Delegates to| Assembler
+    Assembler -->|SlidingWindowDTO| AnomalyEngine
+    Decimator -->|Folds inference metrics into| Assembler
 
     %% Domain Internal Orchestration
     Decimator -->|Commits summary to| RingBuffer
