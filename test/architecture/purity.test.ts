@@ -6,11 +6,12 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-const ROOT = resolve(__dirname, '../..');
+const ROOT = resolve(__dirname, '../..').replaceAll('\\', '/');
 
+/** All .ts files under dir, with forward slashes so the same assertions hold on Windows. */
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((n) => {
-    const p = join(dir, n);
+    const p = join(dir, n).replaceAll('\\', '/');
     return statSync(p).isDirectory() ? files(p) : p.endsWith('.ts') ? [p] : [];
   });
 }

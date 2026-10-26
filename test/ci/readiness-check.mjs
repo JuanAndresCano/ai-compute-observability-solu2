@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Mechanical part of the Sprint Readiness Audit (workshop section 7, Step 4.2, checks 1, 3, 4 and the Annex B story fields).
 // The judgement part (do artifacts contradict each other? is every decision recorded?) is in planning/readiness-gate-report.md.
+import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-const root = resolve(new URL('../..', import.meta.url).pathname);
+const root = resolve(fileURLToPath(new URL('../..', import.meta.url))); // fileURLToPath: .pathname breaks on Windows
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const epicsMd = read('planning/epics.md');
 const prd = read('planning/prd.md');
@@ -65,7 +66,7 @@ for (let n = 1; n <= 8; n++) {
 // ---- tests <-> stories: every tag in code in exactly one story; every story test exists in code
 const TAG = /\[((?:C[1-4]-|W-|X-|D-|S-)[A-Za-z0-9-]+|A-R\d)\]/g;
 const inCode = new Set([...code.matchAll(TAG)].map((m) => m[1]));
-const ID = /\b(?:C[1-4]-[A-Z0-9a-z]+(?:-[A-Za-z0-9]+)*|W-\d|X-AD07|D-[A-Z]+-[a-e]|S-\d\d[a-h]|A-R\d)\b/g;
+const ID = /\b(?:C[1-4]-[A-Z0-9a-z]+(?:-[A-Za-z0-9]+)*|W-\d|X-AD07|D-[A-Z]+-[a-f]|S-\d\d[a-h]|A-R\d)\b/g;
 const owner = new Map();
 for (const s of stories) {
   for (const t of s.field('ATDD').match(ID) ?? []) {
