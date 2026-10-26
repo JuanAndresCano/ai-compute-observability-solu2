@@ -3,6 +3,8 @@
   "compilerOptions": {
     "noEmit": false,
     "outDir": "dist",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "declaration": false,
     "sourceMap": false
   },

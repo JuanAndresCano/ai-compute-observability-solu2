@@ -19,8 +19,9 @@ RUN npm ci
 # Copy full application codebase
 COPY . .
 
-# Run type checking to verify code integrity
+# Run type checking and build production bundle
 RUN npm run typecheck
+RUN npm run build
 
 # Expose HTTP port
 EXPOSE 8080
@@ -36,4 +37,4 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8080/health || exit 1
 
 # Start application server
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/src/server.js"]

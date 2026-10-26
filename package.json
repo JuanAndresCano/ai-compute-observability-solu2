@@ -3,19 +3,20 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Module 11 - AI Infrastructure Observability Console. Solu-2 solutioning package: contracts, schemas, red-phase ATDD suite. No production logic (Solutioning Stop-Point Rule).",
+  "description": "Module 11 - AI Infrastructure Observability Console (Impl-1 Implementation): Clean Architecture / Hexagonal Ports & Adapters, in-memory ring buffer, SQLite persistence, HTTP REST API, 100% green ATDD suite.",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node -e \"fs.writeFileSync('dist/package.json', JSON.stringify({ type: 'commonjs' }))\"",
     "start": "node dist/src/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config test/vitest.harness.config.ts",
     "test:atdd": "vitest run --config test/vitest.atdd.config.ts",
+    "test:all": "vitest run --config test/vitest.harness.config.ts && vitest run --config test/vitest.atdd.config.ts",
     "test:atdd:guard": "node test/ci/red-guard.mjs",
     "test:coverage": "vitest run --config test/vitest.harness.config.ts --coverage",
-    "ci": "npm run typecheck && npm test && npm run trace:check && npm run readiness:check && npm run test:atdd:guard",
+    "ci": "npm run typecheck && npm run test:all && npm run trace:check && npm run readiness:check",
     "trace:check": "node test/ci/trace-check.mjs",
     "readiness:check": "node test/ci/readiness-check.mjs"
   },

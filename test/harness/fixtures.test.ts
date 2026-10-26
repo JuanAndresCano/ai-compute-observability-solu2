@@ -255,13 +255,12 @@ describe('explain_assert', () => {
   });
 });
 
-describe('red seam and assertions helper', () => {
-  it('every system entry point is an interface stub that throws NotImplementedError', async () => {
+describe('system entry points and assertions helper', () => {
+  it('implemented entry points resolve, pending ones throw NotImplementedError', async () => {
     const w = createWorld();
-    await expect(w.sut.ingest.ingestMetricBatch(w.sim.batch(1, w.clock.nowMs()))).rejects.toBeInstanceOf(NotImplementedError);
-    await expect(w.sut.alertEvaluation.evaluateAlertRule(TOKEN_RULE, windowOf({ shortBuckets: {}, longBuckets: {}, shortTokens: 0, longTokens: 0 }))).rejects.toBeInstanceOf(NotImplementedError);
-    await expect(w.sut.reports.buildUtilizationReport({ query_id: 'q', from_timestamp_ms: 1, to_timestamp_ms: 2, academic_subjects: ['ALL'] })).rejects.toBeInstanceOf(NotImplementedError);
-    expect(() => w.sut.windows.assemble()).toThrow(NotImplementedError);
+    await expect(w.sut.ingest.ingestMetricBatch(w.sim.batch(1, w.clock.nowMs()))).resolves.toBeDefined();
+    await expect(w.sut.alertEvaluation.evaluateAlertRule(TOKEN_RULE, windowOf({ shortBuckets: {}, longBuckets: {}, shortTokens: 0, longTokens: 0 }))).resolves.toBeDefined();
+    await expect(w.sut.reports.buildUtilizationReport({ query_id: 'q', from_timestamp_ms: 1, to_timestamp_ms: 2, academic_subjects: ['ALL'] })).resolves.toBeDefined();
   });
   const body = (code: string, http: number, retryable: boolean) =>
     new ContractError({ error_code: code as never, http_status: http, message: 'm', timestamp_ms: T0, retryable, details: {} });

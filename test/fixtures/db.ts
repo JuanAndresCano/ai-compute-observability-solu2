@@ -11,6 +11,7 @@ export const TABLES = ['cluster_nodes', 'telemetry_buckets', 'ingested_batches',
 export type TableName = (typeof TABLES)[number];
 
 const traces = new WeakMap<Db, string[][]>();
+let inFingerprint = false;
 
 /**
  * Live log of every SQL statement EXECUTED from now on, whenever it was prepared (better-sqlite3 `verbose` reports
@@ -26,7 +27,13 @@ export function traceSql(db: Db): string[] {
 export function createTestDb(opts: { seed?: boolean; nowMs?: number } = {}): Db {
   // eslint-disable-next-line prefer-const
   let db: Db;
-  db = new Database(':memory:', { verbose: (sql) => traces.get(db)?.forEach((l) => l.push(String(sql))) });
+  db = new Database(':memory:', {
+    verbose: (sql) => {
+      if (!inFingerprint) {
+        traces.get(db)?.forEach((l) => l.push(String(sql)));
+      }
+    },
+  });
   db.exec(readFileSync(MIGRATION_PATH, 'utf8'));
   if (opts.seed !== false) seedFleet(db, opts.nowMs ?? T0);
   return db;
@@ -38,7 +45,12 @@ export function count(db: Db, table: TableName): number {
 
 /** Full content of every table: equal fingerprints before/after prove "zero mutations". */
 export function fingerprint(db: Db): string {
-  return JSON.stringify(
-    TABLES.map((t) => [t, db.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all()]),
-  );
+  inFingerprint = true;
+  try {
+    return JSON.stringify(
+      TABLES.map((t) => [t, db.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all()]),
+    );
+  } finally {
+    inFingerprint = false;
+  }
 }

@@ -46,19 +46,25 @@ export interface System {
   monitor: MonitoringPort;
   /** The process-wide ring buffer (AD-02); built on first access. */
   readonly ring: TelemetryRingBuffer;
+  getActiveAlerts?(): Promise<any[]>;
 }
 
 /** Composition root: the only place that wires application services to ports. */
 export function createSystem(deps: Deps): System {
+  const ring = new TelemetryRingBuffer(FLEET_SERIES_IDS);
+  const windows = new SlidingWindowAssembler(deps.clock);
+  const ingest = new TelemetryIngestionService(deps, { ring, windows });
+  const watchdog = ingest.getWatchdog();
+  const monitor = new NodeMonitorService(watchdog, deps);
+
   return {
-    ingest: new TelemetryIngestionService(deps),
+    ingest,
     alertEvaluation: new AlertEvaluationService(deps),
     reports: new ReportingService(deps),
-    windows: new SlidingWindowAssembler(),
-    forensics: new ForensicsService(deps),
-    monitor: new NodeMonitorService(deps),
-    get ring(): TelemetryRingBuffer {
-      return new TelemetryRingBuffer(FLEET_SERIES_IDS);
-    },
+    windows,
+    forensics: new ForensicsService(deps, watchdog),
+    monitor,
+    ring,
+    getActiveAlerts: () => (deps.alerts.getActiveAlerts ? deps.alerts.getActiveAlerts() : Promise.resolve([])),
   };
 }
