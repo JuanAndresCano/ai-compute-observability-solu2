@@ -47,8 +47,8 @@ CREATE TABLE IF NOT EXISTS telemetry_buckets (
     -- Physical Invariant: Values must reside within valid physical telemetry boundaries
     CONSTRAINT chk_telemetry_bounds CHECK (
         temperature_min <= temperature_max AND
-        temperature_min >= -50.0 AND
-        temperature_max <= 150.0 AND
+        temperature_min >= -20.0 AND
+        temperature_max <= 120.0 AND
         gpu_utilization_pct >= 0.0 AND
         gpu_utilization_pct <= 100.0 AND
         vram_used_bytes >= 0
@@ -62,9 +62,14 @@ ON telemetry_buckets(node_id, gpu_index, bucket_start_ms DESC);
 -- 3. OPERATIONAL ALERTS (Anomalies & Timeouts with Cooldown Enforcement)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS operational_alerts (
-    alert_id TEXT PRIMARY KEY,
-    incident_key TEXT NOT NULL,
-    node_id TEXT NOT NULL,
+    alert_id TEXT PRIMARY KEY CHECK (alert_id GLOB 'ALT-*'),
+    -- One identifier per incident (resolved or not): 'INC-TOKEN-P99-CLUSTER-<triggered_at_ms>' (AMD-3)
+    incident_key TEXT NOT NULL UNIQUE,
+    -- 'CLUSTER' for cluster-wide rules; otherwise one of the 32 registered node IDs
+    node_id TEXT NOT NULL CHECK (
+        node_id = 'CLUSTER' OR node_id = 'server-gpu-01' OR
+        (node_id GLOB 'ws-gpu-[0-3][0-9]' AND substr(node_id, 8, 2) BETWEEN '01' AND '31')
+    ),
     trigger_rule TEXT NOT NULL CHECK (trigger_rule IN ('TOKEN_SPIKE_AND_LATENCY_BREACH', 'NODE_HEARTBEAT_TIMEOUT', 'THERMAL_CRITICAL_THRESHOLD')),
     severity TEXT NOT NULL CHECK (severity IN ('INFO', 'WARNING', 'CRITICAL')),
     status TEXT NOT NULL DEFAULT 'TRIGGERED' CHECK (status IN ('TRIGGERED', 'CLEARED', 'ACKNOWLEDGED')),
@@ -80,9 +85,10 @@ CREATE TABLE IF NOT EXISTS operational_alerts (
     CONSTRAINT chk_alert_resolution_order CHECK (resolved_at_ms IS NULL OR resolved_at_ms >= triggered_at_ms)
 );
 
--- Physical Invariant INV-05 / AD-05: Exactly ONE active unresolved alert per incident_key
-CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_incident 
-ON operational_alerts(incident_key) 
+-- Physical Invariant INV-05 / AD-05: AT MOST ONE active (unresolved) alert per (trigger_rule, node_id).
+-- Conflict target of the atomic insert: ON CONFLICT (trigger_rule, node_id) WHERE resolved_at_ms IS NULL DO NOTHING
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_alert 
+ON operational_alerts(trigger_rule, node_id) 
 WHERE resolved_at_ms IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_alerts_node_active 
@@ -114,14 +120,16 @@ CREATE TABLE IF NOT EXISTS rollup_hourly_metrics (
     hour_epoch INTEGER NOT NULL CHECK (hour_epoch > 0), -- Unix timestamp truncated to 1 hour
     gpu_hours_busy REAL NOT NULL CHECK (gpu_hours_busy >= 0.0 AND gpu_hours_busy <= 1.0001),
     gpu_hours_idle REAL NOT NULL CHECK (gpu_hours_idle >= 0.0 AND gpu_hours_idle <= 1.0001),
+    -- GPU-hours in which the GPU was not HEALTHY (STALE / SILENT_TIMEOUT / RECOVERING / CORDONED) (AMD-8)
+    gpu_hours_unavailable REAL NOT NULL DEFAULT 0.0 CHECK (gpu_hours_unavailable >= 0.0 AND gpu_hours_unavailable <= 1.0001),
     prompt_tokens_total INTEGER NOT NULL CHECK (prompt_tokens_total >= 0),
     completion_tokens_total INTEGER NOT NULL CHECK (completion_tokens_total >= 0),
     primary_subject TEXT NOT NULL CHECK (primary_subject IN ('CS-101', 'CS-480', 'CS-530', 'FAC-RES', 'IDLE')),
     created_at_ms INTEGER NOT NULL,
     PRIMARY KEY (node_id, gpu_index, hour_epoch),
     FOREIGN KEY (node_id, gpu_index) REFERENCES cluster_nodes(node_id, gpu_index) ON DELETE CASCADE,
-    -- Physical Invariant INV-06 / AD-06: Busy + Idle hours cannot exceed 1 hour per bucket
-    CONSTRAINT chk_hourly_gpu_sum CHECK ((gpu_hours_busy + gpu_hours_idle) <= 1.0001)
+    -- Physical Invariant INV-06 / AD-06: every GPU-hour is fully accounted for: busy + idle + unavailable = 1.0 ± 0.001
+    CONSTRAINT chk_hourly_gpu_sum CHECK (ABS((gpu_hours_busy + gpu_hours_idle + gpu_hours_unavailable) - 1.0) <= 0.001)
 );
 
 CREATE INDEX IF NOT EXISTS idx_rollups_query_window 

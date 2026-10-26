@@ -23,7 +23,9 @@ paths:
               $ref: '#/components/schemas/MetricBatchDTO'
       responses:
         '200':
-          description: Batch successfully ingested and aggregated into active decimation bucket.
+          description: >
+            Batch ingested. accepted_count + dropped_count = events.length; events beyond the free queue
+            capacity are tail-dropped and reported in dropped_count (partial acceptance is still HTTP 200).
           content:
             application/json:
               schema:
@@ -41,12 +43,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorBodyDTO'
         '429':
-          description: Ingestion queue saturated (>10,000 raw events). Client must back off.
+          description: Free queue capacity is 0 of 10,000 raw events (ERR_BUFFER_OVERFLOW). Zero events accepted. Client must back off.
           headers:
             Retry-After:
               schema:
                 type: integer
                 example: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDTO'
+        '503':
+          description: Storage engine unavailable (ERR_DATABASE_UNAVAILABLE). Transaction rolled back; zero partial writes.
           content:
             application/json:
               schema:
@@ -65,19 +73,21 @@ paths:
               $ref: '#/components/schemas/AlertRuleEvaluationRequestDTO'
       responses:
         '200':
-          description: Evaluation completed. Status reflects TRIGGERED, CLEARED, or SUPPRESSED_COLD_START.
+          description: >
+            Evaluation completed. Status reflects TRIGGERED, CLEARED, or SUPPRESSED_COLD_START
+            (fewer than 50 samples in the long window; this is a result, not an error).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AlertEvaluationDTO'
-        '412':
-          description: Cold-start condition; baseline window contains fewer than 50 completed samples.
+        '422':
+          description: Invalid rule specification, unsupported window configuration, or malformed window histograms.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBodyDTO'
-        '422':
-          description: Invalid rule specification or unsupported window configuration.
+        '503':
+          description: Storage engine unavailable (ERR_DATABASE_UNAVAILABLE). Transaction rolled back; zero partial writes.
           content:
             application/json:
               schema:
@@ -126,6 +136,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBodyDTO'
+        '503':
+          description: Storage engine unavailable (ERR_DATABASE_UNAVAILABLE). Transaction rolled back; zero partial writes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBodyDTO'
 
 components:
   schemas:
@@ -144,7 +160,7 @@ components:
       properties:
         node_id:
           type: string
-          pattern: '^(ws-gpu-[0-3][0-9]|server-gpu-01)$'
+          pattern: '^(ws-gpu-(0[1-9]|[12][0-9]|3[01])|server-gpu-01)$'
           example: ws-gpu-05
         gpu_index:
           type: integer
@@ -194,8 +210,48 @@ components:
           type: integer
         events:
           type: array
+          minItems: 1
+          maxItems: 5000
           items:
             $ref: '#/components/schemas/NodeTelemetryPacketDTO'
+        inference_metrics:
+          type: array
+          maxItems: 5000
+          items:
+            $ref: '#/components/schemas/InferenceMetricPacketDTO'
+
+    InferenceMetricPacketDTO:
+      type: object
+      required:
+        - request_id
+        - node_id
+        - gpu_index
+        - academic_subject
+        - prompt_tokens
+        - completion_tokens
+        - queue_duration_ms
+        - inference_duration_ms
+        - total_latency_ms
+        - timestamp_ms
+      properties:
+        request_id: { type: string, format: uuid }
+        node_id:
+          type: string
+          pattern: '^(ws-gpu-(0[1-9]|[12][0-9]|3[01])|server-gpu-01)$'
+        gpu_index: { type: integer, enum: [0, 1] }
+        model_id: { type: string }
+        academic_subject:
+          type: string
+          enum: [CS-101, CS-480, CS-530, FAC-RES, IDLE]
+        prompt_tokens: { type: integer, minimum: 0 }
+        completion_tokens: { type: integer, minimum: 0 }
+        queue_duration_ms: { type: number, minimum: 0 }
+        inference_duration_ms: { type: number, minimum: 0 }
+        total_latency_ms:
+          type: number
+          minimum: 0
+          description: Equals queue_duration_ms + inference_duration_ms within 0.001 ms.
+        timestamp_ms: { type: integer, minimum: 1 }
 
     IngestionResultDTO:
       type: object
@@ -235,16 +291,36 @@ components:
             - short_window_seconds
             - long_window_seconds
             - histogram_bucket_count
+            - short_histogram
+            - long_histogram
+            - short_window_prompt_tokens
+            - long_window_prompt_tokens
           properties:
             short_window_seconds:
               type: integer
-              example: 30
+              enum: [30]
             long_window_seconds:
               type: integer
-              example: 300
+              enum: [300]
             histogram_bucket_count:
               type: integer
-              example: 100
+              enum: [100]
+            short_histogram:
+              type: array
+              minItems: 100
+              maxItems: 100
+              items: { type: integer, minimum: 0 }
+            long_histogram:
+              type: array
+              minItems: 100
+              maxItems: 100
+              items: { type: integer, minimum: 0 }
+              description: Per bucket, long_histogram[i] >= short_histogram[i].
+            short_window_prompt_tokens: { type: integer, minimum: 0 }
+            long_window_prompt_tokens:
+              type: integer
+              minimum: 0
+              description: Must be >= short_window_prompt_tokens.
 
     AlertEvaluationDTO:
       type: object
@@ -298,11 +374,12 @@ components:
             duration_hours: { type: number }
         summary:
           type: object
-          required: [total_cluster_gpu_hours, utilized_gpu_hours, idle_gpu_hours, overall_utilization_pct, total_prompt_tokens, total_completion_tokens]
+          required: [total_cluster_gpu_hours, utilized_gpu_hours, idle_gpu_hours, unavailable_gpu_hours, overall_utilization_pct, total_prompt_tokens, total_completion_tokens]
           properties:
             total_cluster_gpu_hours: { type: number }
             utilized_gpu_hours: { type: number }
             idle_gpu_hours: { type: number }
+            unavailable_gpu_hours: { type: number }
             overall_utilization_pct: { type: number }
             total_prompt_tokens: { type: integer }
             total_completion_tokens: { type: integer }
@@ -350,6 +427,15 @@ components:
       properties:
         error_code:
           type: string
+          enum:
+            - ERR_INVALID_TELEMETRY_PAYLOAD
+            - ERR_FUTURE_TIMESTAMP_DRIFT
+            - ERR_BUFFER_OVERFLOW
+            - ERR_INVALID_ALERT_RULE_SPEC
+            - ERR_INVALID_DATE_RANGE
+            - ERR_FUTURE_REPORT_QUERY
+            - ERR_INVALID_ACADEMIC_SUBJECT
+            - ERR_DATABASE_UNAVAILABLE
           example: ERR_INVALID_TELEMETRY_PAYLOAD
         http_status:
           type: integer
