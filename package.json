@@ -13,8 +13,9 @@
     "test:atdd": "vitest run --config test/vitest.atdd.config.ts",
     "test:atdd:guard": "node test/ci/red-guard.mjs",
     "test:coverage": "vitest run --config test/vitest.harness.config.ts --coverage",
-    "ci": "npm run typecheck && npm test && npm run test:atdd:guard && npm run trace:check",
-    "trace:check": "node test/ci/trace-check.mjs"
+    "ci": "npm run typecheck && npm test && npm run trace:check && npm run readiness:check && npm run test:atdd:guard",
+    "trace:check": "node test/ci/trace-check.mjs",
+    "readiness:check": "node test/ci/readiness-check.mjs"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",

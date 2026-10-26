@@ -8,6 +8,8 @@ import { seedRollups, HOUR_S } from '../fixtures/rollups';
 import { assertExplanation } from '../fixtures/explain_assert';
 import { expectContractError } from '../support/assert';
 import { createWorld } from '../support/world';
+import { SimNodeLog } from '../../src/adapters/sim/sim-node-log';
+import { SimJobRegistry } from '../../src/adapters/sim/sim-job-registry';
 import { SequentialIdGenerator } from '../../src/adapters/sim/sequential-id-generator';
 import { ContractError, NotImplementedError } from '../../src/shared/errors';
 import type { NodeTelemetryPacketDTO } from '../../src/dto';
@@ -122,10 +124,10 @@ describe('sim_telemetry', () => {
 });
 
 describe('db', () => {
-  it('migrates all six tables from 001_observability_schema.sql', () => {
+  it('migrates all seven tables from 001_observability_schema.sql', () => {
     const db = createTestDb();
     const names = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name`).all() as { name: string }[];
-    expect(names.map((n) => n.name)).toEqual(expect.arrayContaining(['audit_events', 'cluster_nodes', 'node_heartbeats', 'operational_alerts', 'rollup_hourly_metrics', 'telemetry_buckets']));
+    expect(names.map((n) => n.name)).toEqual(expect.arrayContaining(['audit_events', 'cluster_nodes', 'node_heartbeats', 'operational_alerts', 'rollup_hourly_metrics', 'telemetry_buckets', 'node_forensics']));
   });
   it('fingerprint is stable when nothing changes and differs after any write', () => {
     const db = createTestDb();
@@ -181,6 +183,47 @@ describe('7-day rollup fixture', () => {
     seedRollups(db, T0 / 1000, { outageHours: 3 });
     const sums = db.prepare(`SELECT SUM(gpu_hours_unavailable) AS u, SUM(gpu_hours_busy) AS b, SUM(gpu_hours_idle) AS i FROM rollup_hourly_metrics`).get();
     expect(sums).toEqual({ u: 3, b: (5544 - 3) * 0.5, i: (5544 - 3) * 0.5 });
+  });
+});
+
+describe('sim_node_log and sim_job_registry (forensic doubles)', () => {
+  it('tail returns the newest n lines, oldest first, per node', async () => {
+    const log = new SimNodeLog();
+    for (let i = 1; i <= 80; i++) log.emit('ws-gpu-22', `l${i}`);
+    log.emit('ws-gpu-01', 'other');
+    const tail = await log.tail('ws-gpu-22', 50);
+    expect(tail).toHaveLength(50);
+    expect(tail[0]).toBe('l31');
+    expect(tail[49]).toBe('l80');
+    expect(await log.tail('ws-gpu-01', 50)).toEqual(['other']);
+    expect(await log.tail('ws-gpu-99', 50)).toEqual([]);
+  });
+  it('tail is a snapshot: lines emitted later do not change an array already returned', async () => {
+    const log = new SimNodeLog();
+    log.emit('ws-gpu-22', 'a');
+    const before = await log.tail('ws-gpu-22', 50);
+    log.emit('ws-gpu-22', 'b');
+    expect(before).toEqual(['a']);
+  });
+  it('the job registry returns the registered job or null', async () => {
+    const jobs = new SimJobRegistry();
+    const job = { job_id: 'j1', user: 'u', subject: 'CS-480', model: 'm', submitted_at_ms: 1 };
+    jobs.setJob('ws-gpu-22', job);
+    expect(await jobs.activeJob('ws-gpu-22')).toEqual(job);
+    expect(await jobs.activeJob('ws-gpu-01')).toBeNull();
+  });
+});
+
+describe('rollup fixture: hourBusy', () => {
+  it('forces every GPU of the chosen hour to the given busy fraction with idle = 1 - busy, and keeps the table valid', () => {
+    const db = createTestDb();
+    seedRollups(db, T0 / 1000, { hourBusy: { 10: 1, 11: 0.999 } });
+    const hour = (h: number) => T0 / 1000 - (168 - h) * HOUR_S;
+    const sums = (h: number) => db.prepare('SELECT SUM(gpu_hours_busy) AS b, SUM(gpu_hours_idle) AS i, COUNT(*) AS n FROM rollup_hourly_metrics WHERE hour_epoch = ?').get(hour(h)) as { b: number; i: number; n: number };
+    expect(sums(10)).toEqual({ b: 33, i: 0, n: 33 });
+    expect(sums(11).b).toBeCloseTo(33 * 0.999, 9);
+    expect(sums(12)).toEqual({ b: 16.5, i: 16.5, n: 33 });
+    expect(count(db, 'rollup_hourly_metrics')).toBe(5544);
   });
 });
 

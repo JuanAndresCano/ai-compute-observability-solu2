@@ -7,7 +7,7 @@ import { T0 } from './fake_clock';
 
 export const MIGRATION_PATH = process.env.SCHEMA_PATH ?? resolve(__dirname, '../../planning/detailed-design/schemas/001_observability_schema.sql');
 
-export const TABLES = ['cluster_nodes', 'telemetry_buckets', 'operational_alerts', 'node_heartbeats', 'rollup_hourly_metrics', 'audit_events'] as const;
+export const TABLES = ['cluster_nodes', 'telemetry_buckets', 'ingested_batches', 'operational_alerts', 'node_heartbeats', 'node_forensics', 'rollup_hourly_metrics', 'audit_events'] as const;
 export type TableName = (typeof TABLES)[number];
 
 const traces = new WeakMap<Db, string[][]>();

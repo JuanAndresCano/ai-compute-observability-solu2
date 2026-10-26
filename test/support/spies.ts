@@ -1,5 +1,6 @@
 import type { MetricsPort } from '../../src/ports/out/metrics.port';
-import type { UiDispatchPort, UiTick } from '../../src/ports/out/ui-dispatch.port';
+import type { UiDispatchPort } from '../../src/ports/out/ui-dispatch.port';
+import type { FleetSnapshotDTO } from '../../src/dto';
 import type { AuditEvent, EventDispatcherPort } from '../../src/ports/out/event-dispatcher.port';
 
 export class EventSpy implements EventDispatcherPort {
@@ -25,12 +26,12 @@ export class MetricsSpy implements MetricsPort {
 }
 
 export class UiSpy implements UiDispatchPort {
-  readonly ticks: UiTick[] = [];
-  dispatch(tick: UiTick): void {
-    this.ticks.push(tick);
+  readonly ticks: FleetSnapshotDTO[] = [];
+  dispatch(snapshot: FleetSnapshotDTO): void {
+    this.ticks.push(snapshot);
   }
   /** Dispatches whose bucket_start_ms lies in [fromMs, fromMs + 1000). */
-  inSecond(fromMs: number): UiTick[] {
+  inSecond(fromMs: number): FleetSnapshotDTO[] {
     return this.ticks.filter((t) => t.bucket_start_ms >= fromMs && t.bucket_start_ms < fromMs + 1000);
   }
 }
