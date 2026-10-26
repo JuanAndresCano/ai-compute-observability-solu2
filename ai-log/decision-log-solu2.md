@@ -20,13 +20,13 @@
 
 | **DEC-12** | Phase 1–2 re-review (Partner B) | Defects in contracts/DDL/DTO found by the Test Lead; options chosen; sign-off governance | AI listed 9 defects with ≥2 options each and a recommendation | **ACCEPT 8 / MODIFY 1 / REJECT 1:** options chosen per item (see entry); item 4 challenged and re-analysed; pre-filled Juan Andrés Cano (Partner B) approvals rejected and reset to PENDING | **ADOPTED** | **Juan Andrés Cano (Partner B)** |
 
-| **DEC-13** | Phase 1–2 amendment (Partner B) | Open observations OBS-1..4: rule scope, persisted hysteresis, bucket id, `is_empty` | AI proposed one handling per observation | **ACCEPT 4/4** (AMD-10..13) | **ADOPTED** | **Juan Andrés Cano (Partner B)** (confirmed by Partner A, 2026-10-26) |
+| **DEC-13** | Phase 1–2 amendment (Partner B) | Open observations OBS-1..4: rule scope, persisted hysteresis, bucket id, `is_empty` | AI proposed one handling per observation | **ACCEPT 4/4** (AMD-10..13) | **ADOPTED** | **Juan Andrés Cano (Partner B)** (confirmed by Partner A, 2026-10-20) |
 
-| **DEC-14** | Phase 3 (ATDD data design) | Unreachable alarm threshold: nested windows cap the spike ratio at 10.0 (AMD-14) | AI built the first breach fixture from the contract formula and found a 11.2x surge could not be expressed | **ACCEPT (2026-10-26, Juan Andrés Cano (Partner B)):** baseline = the 270 s before the short window (option A) **plus AMD-14b**: clearing counts cycles with P99 <= 8,000 ms whatever the ratio | **ADOPTED** (confirmed by Partner A, 2026-10-26) | **Juan Andrés Cano (Partner B)** |
+| **DEC-14** | Phase 3 (ATDD data design) | Unreachable alarm threshold: nested windows cap the spike ratio at 10.0 (AMD-14) | AI built the first breach fixture from the contract formula and found a 11.2x surge could not be expressed | **ACCEPT (2026-10-20, Juan Andrés Cano (Partner B)):** baseline = the 270 s before the short window (option A) **plus AMD-14b**: clearing counts cycles with P99 <= 8,000 ms whatever the ratio | **ADOPTED** (confirmed by Partner A, 2026-10-20) | **Juan Andrés Cano (Partner B)** |
 | **DEC-15** | Phase 3 (test preparation) | How to prepare tests without writing production logic; what the red suite covers; self-review disclosure | AI proposed an oracle implementation to prove the tests can go green | **REJECTED the oracle implementation** (stop-point rule); chose independent oracles, DDL mutation, red-guard probe | **ADOPTED** | **Juan Andrés Cano (Partner B)** |
 
-| **DEC-16** | Phase 4 (epics + readiness audit) | Close contract gaps (AMD-15..20, Operation 4, FleetSnapshotDTO) BEFORE writing stories | AI proposed writing the stories first and leaving the gaps as "contract-first tasks" inside stories | **ACCEPT with modifications (2026-10-26, Juan Andrés Cano (Partner B)):** gaps closed first; after the trade-off review: AMD-17b, AMD-18b, AMD-19 index and AMD-20 rename added (DEC-18) | **ADOPTED** (confirmed by Partner A, 2026-10-26) | **Juan Andrés Cano (Partner B)** |
-| **DEC-17** | Phase 4 (gate drill) | The first drill found a hole in the readiness control itself | First rename of a DTO in a story was NOT detected | **ACCEPT the fix:** regex widened (`DTO|Dto|dto|Type`), drill repeated and caught | **ADOPTED** | **Juan Andrés Cano (Partner B)** (confirmed; Partner A confirmed, 2026-10-26) |
+| **DEC-16** | Phase 4 (epics + readiness audit) | Close contract gaps (AMD-15..20, Operation 4, FleetSnapshotDTO) BEFORE writing stories | AI proposed writing the stories first and leaving the gaps as "contract-first tasks" inside stories | **ACCEPT with modifications (2026-10-20, Juan Andrés Cano (Partner B)):** gaps closed first; after the trade-off review: AMD-17b, AMD-18b, AMD-19 index and AMD-20 rename added (DEC-18) | **ADOPTED** (confirmed by Partner A, 2026-10-20) | **Juan Andrés Cano (Partner B)** |
+| **DEC-17** | Phase 4 (gate drill) | The first drill found a hole in the readiness control itself | First rename of a DTO in a story was NOT detected | **ACCEPT the fix:** regex widened (`DTO|Dto|dto|Type`), drill repeated and caught | **ADOPTED** | **Juan Andrés Cano (Partner B)** (confirmed; Partner A confirmed, 2026-10-20) |
 
 | **DEC-18** | Phase 4 (trade-off review of AMD-14..20) | Juan Andrés Cano (Partner B) asked for the trade-offs of every AI recommendation before deciding | AI listed options per AMD and flagged 3 weak points in its own choices | **ACCEPT all recommendations** (Partner B: "estoy de acuerdo con seguir tus recomendaciones") | **ADOPTED** | **Juan Andrés Cano (Partner B)** |
 
@@ -104,7 +104,7 @@
 ---
 
 ### Entry DEC-12: Juan Andrés Cano (Partner B) Re-Review of the Phase 1–2 Package — Defect Triage, Options and Sign-Off Governance
-* **Timestamp:** 2026-10-26
+* **Timestamp:** 2026-10-20
 * **Lifecycle Phase:** Phase 1–2 amendment, performed by the Test Lead at the start of Phase 3 (feeds back to Phase 0 gaps)
 * **AI Persona / Skill Invoked:** Murat-style test-architect review (adversarial + edge-case lens, read-only) followed by an amendment pass; executed with Claude Code
 * **Trigger Prompt / Context:** Juan Andrés Cano (Partner B) asked the AI to verify that Partner A's handover was correct before any test is written, to list every defect with a recommended fix and at least one alternative, and to apply the fixes the human chose.
@@ -129,39 +129,39 @@
 * **Open items not fixed (need a pair decision):** OBS-1..OBS-4 in `reviews/review-detailed-design.md` §6.1.
 * **Artifacts Changed:** `planning/detailed-design/contracts.md` (v1.1), `ports-and-adapters.md`, `schemas/001_observability_schema.sql`, `schemas/dto.ts`, `schemas/openapi.yaml`, `schemas/events.md`, `planning/ARCHITECTURE.md`, `reviews/review-arch-implementability.md`, `reviews/review-detailed-design.md`.
 * **Note on historical entries:** DEC-10 and DEC-11 describe `UNIQUE(incident_key)` / `idx_unique_active_incident`; that wording is kept as the record of what was decided on 2026-10-19 and is superseded by AMD-3.
-* **Pair Attribution:** Juan Andrés Cano (Partner B, Test Lead) decided; Partner A (Juand) confirmed the amendments to his artifacts on 2026-10-26.
+* **Pair Attribution:** Juan Andrés Cano (Partner B, Test Lead) decided; Partner A (Juand) confirmed the amendments to his artifacts on 2026-10-20.
 
 ---
 
 ### Entry DEC-13: Resolution of Open Observations OBS-1..4 (AMD-10..13)
-* **Timestamp:** 2026-10-26
+* **Timestamp:** 2026-10-20
 * **Lifecycle Phase:** Phase 1–2 amendment, before Phase 3 tests depend on the clauses
 * **AI Persona / Skill Invoked:** Test-architect review (edge-case lens) with Claude Code
 * **Trigger Prompt / Context:** Juan Andrés Cano (Partner B) accepted the handling proposed in `reviews/review-detailed-design.md` §6.1 ("vamos con esas decisiones") and asked to continue to Phase 3.
 * **AI Generated Output:** One proposal per observation. For OBS-2 the AI chose a persisted counter over an in-domain object, applying the argument Partner A recorded in DEC-10 (volatile state is lost on restart), and added `last_cycle_index` so a duplicate call inside one 5,000 ms cycle cannot double-count. The AI also removed `THERMAL_CRITICAL_THRESHOLD` after finding no FR for it in `prd.md`.
-* **Human Decision (Partner B):** ACCEPT 4/4. Partner A confirmed these four amendments on 2026-10-26.
+* **Human Decision (Partner B):** ACCEPT 4/4. Partner A confirmed these four amendments on 2026-10-20.
 * **Verification:** DDL re-executed on SQLite 3.45.1; hysteresis `UPDATE` simulated at t = 5,000 / 5,100 / 10,000 / 15,000 / 20,000 ms (counter 1, 1, 2, 3→`CLEARED`, unchanged); `dto.ts` compiled with `tsc --strict`; `openapi.yaml` parsed.
 * **Artifacts Changed:** `contracts.md`, `001_observability_schema.sql`, `dto.ts`, `openapi.yaml`, `events.md`, `reviews/review-detailed-design.md`.
-* **Pair Attribution:** Juan Andrés Cano (Partner B) decided; confirmed by Partner A (Juand), 2026-10-26.
+* **Pair Attribution:** Juan Andrés Cano (Partner B) decided; confirmed by Partner A (Juand), 2026-10-20.
 
 ---
 
 ### Entry DEC-14: AMD-14 - The Alarm Formula Cannot Fire With Nested Windows
-* **Timestamp:** 2026-10-26
+* **Timestamp:** 2026-10-20
 * **Lifecycle Phase:** Phase 3 - building the data for the first happy-path ATDD test (`C2-Q1a`)
 * **AI Persona / Skill Invoked:** Test-architect lens with Claude Code (test data derivation; not a skill run)
 * **Trigger Prompt / Context:** Juan Andrés Cano (Partner B) asked the AI to write the red suite. To express "baseline 1,200 tok/s, current 13,440 tok/s" the AI had to fill `long_window_prompt_tokens`. AMD-9 (accepted in DEC-12) made the short window part of the long window, so `long >= short`, and the contract baseline was `long / 300`.
 * **AI Generated Output:** A derivation: ratio = (S/30) / (L/300) = 10·S/L with S <= L, so ratio <= 10.0 and equals 10.0 only if every token of the last 300 s occurred in the last 30 s; exhaustive check over small integers confirmed the maximum is exactly 10.0. The same defect exists in `ARCHITECTURE.md` AD-03 (Plan-2), so it predates this unit. Two options: **A** baseline = `(long - short) / 270` (the 270 s before the short window); **B** make the windows disjoint (`[now-330 s, now-30 s)`) and drop the containment precondition.
-* **Human Decision (Partner B):** the AI applied A **provisionally** so the tests have a coherent oracle (it changes one formula and one time clause; B changes the assembler and the DTO more). Confirmed by Juan Andrés Cano (Partner B) and by Partner A (Juand) on 2026-10-26.
+* **Human Decision (Partner B):** the AI applied A **provisionally** so the tests have a coherent oracle (it changes one formula and one time clause; B changes the assembler and the DTO more). Confirmed by Juan Andrés Cano (Partner B) and by Partner A (Juand) on 2026-10-20.
 * **Why A:** it keeps the window shapes from the PRD (30 s and 300 s) and the P1 containment check from AMD-9; the baseline is still "the 300 s average" minus the burst under test.
 * **Artifacts Changed:** `contracts.md` (Op2 Q2 step 2, Time), `ARCHITECTURE.md` section 2.3, `dto.ts` comment, tests `C2-Q1a`, `C2-Q2a`, `C2-PURE`, `D-ENG-*`.
 * **If rejected:** only the helper builders `breachWindow`, `calmWindow`, `ratioWindow` and the cases in `C2-Q2a`/`D-ENG-a` need new numbers.
-* **Pair Attribution:** Juan Andrés Cano (Partner B) proposed; confirmed by Partner A (Juand), 2026-10-26.
+* **Pair Attribution:** Juan Andrés Cano (Partner B) proposed; confirmed by Partner A (Juand), 2026-10-20.
 
 ---
 
 ### Entry DEC-15: Preparing Tests Without Production Logic; Self-Review Disclosure
-* **Timestamp:** 2026-10-26
+* **Timestamp:** 2026-10-20
 * **Lifecycle Phase:** Phase 3 - Test Preparation
 * **AI Persona / Skill Invoked:** Murat-style test architect with Claude Code. The `bmad-testarch-*` skills could not be loaded from this repository; their templates and steps were followed by hand (`test/tea-skill-matrix.md` states this).
 * **AI Generated Proposal:** To prove the 133 tests can turn green, write a throw-away reference implementation outside the repository and run the suite against it.
@@ -174,7 +174,7 @@
 ---
 
 ### Entry DEC-16: Close the Contract Gaps Before Writing the Stories
-* **Timestamp:** 2026-10-26
+* **Timestamp:** 2026-10-20
 * **Lifecycle Phase:** Phase 4 - Step 4.1 (epics) and the readiness audit checks 1, 2 and 5
 * **AI Persona / Skill Invoked:** John (PM) / Amelia (Dev) perspective, `bmad-create-epics-and-stories` structure followed by hand; the skill itself could not be loaded from this repository.
 * **Trigger Prompt / Context:** Juan Andrés Cano (Partner B) asked to move to Phase 4 quickly and to take on as much of the second half as possible. Mapping requirements to stories showed that FR-03 (forensic drill-down), the FR-04 "peak contention window" and the heatmap / Storm Mode / STALE_CACHED outputs had no contract or DTO, and that `batch_id` storage, `hour_epoch` units and two report DTO fields were undefined.
@@ -183,12 +183,12 @@
 * **What changed:** AMD-15 `peak_contention_windows`; AMD-16 Operation 4 `getNodeForensics` + capture clause + `node_forensics` + 2 error codes; AMD-17 1,000 ms loop vs 5,000 ms cycle and "every accepted event is a heartbeat"; AMD-18 `FleetSnapshotDTO`; AMD-19 `ingested_batches`; AMD-20 `hour_epoch` in seconds and definitions of `by_subject` / `node_aggregates`; PRD FR-01 and FR-02 aligned to the contract (REV-DET-17..19). Findings: `reviews/review-detailed-design.md` section 6.3 (REV-DET-17..26).
 * **Verification:** DDL executed on SQLite 3.45 (forensics CHECK rejects 51 lines, invalid JSON, unknown node; upsert returns 1 then 0; batch id registers once); `dto.ts` compiled with `tsc --strict`; OpenAPI parsed with 0 unresolved `$ref`; 20 new red tests and 7 new green tests (3 schema, 4 fixture self-tests); `npm run ci` green.
 * **Artifacts Changed:** `contracts.md` (v1.2), `dto.ts`, `openapi.yaml`, `001_observability_schema.sql`, `events.md`, `prd.md`, `ports-and-adapters.md`, `test/**`, `src/**` (stubs), `planning/epics.md`.
-* **Pair Attribution:** AI-proposed under Juan Andrés Cano (Partner B)'s instruction; Juan Andrés Cano (Partner B) confirmed; Partner A confirmed on 2026-10-26.
+* **Pair Attribution:** AI-proposed under Juan Andrés Cano (Partner B)'s instruction; Juan Andrés Cano (Partner B) confirmed; Partner A confirmed on 2026-10-20.
 
 ---
 
 ### Entry DEC-17: The Gate Drill Found a Hole in the Control
-* **Timestamp:** 2026-10-26
+* **Timestamp:** 2026-10-20
 * **Lifecycle Phase:** Phase 4 - Step 4.3 (gate drill)
 * **What happened:** Break 1 (delete the `Binding invariants` line of Story 2.2) was reported by `readiness-check` ("Story 2.2: missing field Binding invariants"). Break 2 (rename `FleetCellDTO` to `FleetCellDto` in Story 3.4 only) was **not** reported: the check looked for tokens ending in `DTO`, and the broken name no longer matched the pattern. The control was a rubber stamp for that class of break.
 * **Fix:** the token pattern now matches `DTO|Dto|dto|Type|type`; the drill was repeated and reported "Story 3.4: DTO/type \"FleetCellDto\" does not exist in dto.ts"; the story was restored byte-identical and the check passed. Full log in `planning/readiness-gate-report.md`.
@@ -198,7 +198,7 @@
 ---
 
 ### Entry DEC-18: Trade-off Review of AMD-14..20 and the Changes It Produced
-* **Timestamp:** 2026-10-26
+* **Timestamp:** 2026-10-20
 * **Lifecycle Phase:** Phase 4
 * **Trigger:** Juan Andrés Cano (Partner B) asked for the trade-offs behind each recommendation before deciding which to verify. The AI re-read its own choices and found three weak points; Juan Andrés Cano (Partner B) accepted all recommendations.
 * **Human Decision (Partner B): ACCEPT.** Applied changes:
@@ -215,4 +215,4 @@
 | PRD | Keep the alignments (REV-DET-17..19) | A sensor reading of 118 C is exactly the condition to alert on; rejecting it as invalid (old range 20-115) would hide it. |
 
 * **Verification:** `npm run ci` green; mutation of the new constraints (index, `batch_id` length CHECK, forensics 50-line CHECK, renamed rollup primary key) 4 of 4 killed.
-* **Pair Attribution:** Juan Andrés Cano (Partner B) decided; confirmed by Partner A (Juand), 2026-10-26.
+* **Pair Attribution:** Juan Andrés Cano (Partner B) decided; confirmed by Partner A (Juand), 2026-10-20.

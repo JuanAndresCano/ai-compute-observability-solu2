@@ -1,6 +1,6 @@
 # Implementation Readiness Gate Report - Solu-2, Module 11
 
-**Date:** 2026-10-26 · **Auditor:** Partner B (Test Lead) with Claude Code in the roles of John (PM) and Amelia (Dev) · **Scope:** `planning/epics.md` (4 epics, 16 stories) against `prd.md`, `ARCHITECTURE.md`, `contracts.md` v1.2, `schemas/`, `ux/`, `test/`.
+**Date:** 2026-10-20 · **Auditor:** Partner B (Test Lead) with Claude Code in the roles of John (PM) and Amelia (Dev) · **Scope:** `planning/epics.md` (4 epics, 16 stories) against `prd.md`, `ARCHITECTURE.md`, `contracts.md` v1.2, `schemas/`, `ux/`, `test/`.
 *The Plan-2 gate that came with the handover (PASS, 2026-10-19, signed by Juand and Liam) is kept as `reviews/plan2-readiness-gate-report.md`. It judged the Plan-2 package, not this unit.*
 
 ## 1. Verdict
@@ -9,17 +9,17 @@
 
 **One line:** a developer can implement the 16 stories as recorded without inventing a decision: every requirement traces forward and back, no story depends on a later one, every test belongs to exactly one story, DDL / DTO / OpenAPI execute and parse, and Partner B has accepted every decision that was pending (DEC-14, DEC-16, DEC-18).
 
-**What changed since the CONCERNS version of this report (earlier on 2026-10-26):** the three decisions that kept it at CONCERNS were closed. AMD-14 (alarm baseline) and AMD-15..20 were accepted by Partner B after a trade-off review, which also produced four corrections (AMD-14b, AMD-17b, AMD-18b, index and rename; `reviews/review-detailed-design.md` section 6.4, DEC-18).
+**What changed since the CONCERNS version of this report (earlier on 2026-10-20):** the three decisions that kept it at CONCERNS were closed. AMD-14 (alarm baseline) and AMD-15..20 were accepted by Partner B after a trade-off review, which also produced four corrections (AMD-14b, AMD-17b, AMD-18b, index and rename; `reviews/review-detailed-design.md` section 6.4, DEC-18).
 
-**Sign-offs (closed on 2026-10-26):**
+**Sign-offs (closed on 2026-10-20):**
 
 | # | Item | Status |
 |:-:|---|---|
-| R-1 | Partner A (Juand) confirmation of AMD-14, 14b and AMD-15..20 and the amended contracts / PRD alignments | **CLOSED - confirmed by Partner A on 2026-10-26** (his review message; recorded in ENTREGA.md section "Partner A review"). |
-| R-2 | Independent re-review of the test suite (TQ-A, `reviews/review-test-quality.md`) | **CLOSED - PASS by Partner A on 2026-10-26**. |
-| R-3 | Partner B signatures on the Phase 0 and Phase 1-2 reviews | **CLOSED - signed by Juan Andrés Cano on 2026-10-26.** Still open and stated openly: the `bmad-testarch-*` skills were not run from this repository (`test/tea-skill-matrix.md`). |
+| R-1 | Partner A (Juand) confirmation of AMD-14, 14b and AMD-15..20 and the amended contracts / PRD alignments | **CLOSED - confirmed by Partner A on 2026-10-20** (his review message; recorded in ENTREGA.md section "Partner A review"). |
+| R-2 | Independent re-review of the test suite (TQ-A, `reviews/review-test-quality.md`) | **CLOSED - PASS by Partner A on 2026-10-20**. |
+| R-3 | Partner B signatures on the Phase 0 and Phase 1-2 reviews | **CLOSED - signed by Juan Andrés Cano on 2026-10-20.** Still open and stated openly: the `bmad-testarch-*` skills were not run from this repository (`test/tea-skill-matrix.md`). |
 
-**Sign-off of this gate:** *Partner A (Juand - Architect Lead): [APPROVED - 2026-10-26]* · *Partner B (Juan Andrés Cano - Test Lead): [APPROVED - 2026-10-26]*.
+**Sign-off of this gate:** *Partner A (Juand - Architect Lead): [APPROVED - 2026-10-20]* · *Partner B (Juan Andrés Cano - Test Lead): [APPROVED - 2026-10-20]*.
 
 ## 2. The six audit checks (workshop 4.2)
 
@@ -89,7 +89,7 @@ Honest scale note: the times are tool times for a script run and a text restore,
 
 ## 6. Keeping it PASS
 
-1. Both partners signed on 2026-10-26; the gate stays PASS as long as the artifacts are unchanged.
+1. Both partners signed on 2026-10-20; the gate stays PASS as long as the artifacts are unchanged.
 2. If he reverses or changes an AMD, edit the artifacts, re-run `npm run ci` and the two `sprint_plan.py` commands, paste the new output in section 3, and re-judge checks 1-6.
 3. Optional: Partner A re-reviews `reviews/review-test-quality.md` (R-2).
 
@@ -97,5 +97,5 @@ Honest scale note: the times are tool times for a script run and a text restore,
 
 | Role | Name | Decision | Date |
 |---|---|:-:|---|
-| Architect Lead | Partner A (Juand) | APPROVED | 2026-10-26 |
-| Test Lead | Partner B (Juan Andrés Cano) | APPROVED (decisions DEC-14, DEC-16, DEC-18 recorded as ACCEPT) | 2026-10-26 |
+| Architect Lead | Partner A (Juand) | APPROVED | 2026-10-20 |
+| Test Lead | Partner B (Juan Andrés Cano) | APPROVED (decisions DEC-14, DEC-16, DEC-18 recorded as ACCEPT) | 2026-10-20 |

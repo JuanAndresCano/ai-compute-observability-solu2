@@ -1,6 +1,6 @@
 # Entrega — Unit 4 Solu-2: Module 11, AI Infrastructure Observability Console
 
-**Pair:** Juand (Partner A, Architect Lead in Phases 0-2) · Juan Andrés Cano (Partner B, Test Lead in Phase 3; Phases 4-5 worked by Partner B). **Both partners signed on 2026-10-26** (see "Sign-offs" at the end).
+**Pair:** Juand (Partner A, Architect Lead in Phases 0-2) · Juan Andrés Cano (Partner B, Test Lead in Phase 3; Phases 4-5 worked by Partner B). **Both partners signed on 2026-10-20** (see "Sign-offs" at the end).
 **AI governance:** Level 3. Chat in Spanish, artifacts in English.
 **Solutioning stop-point respected:** contracts, ports & adapters, DDL, DTOs, OpenAPI, events, red-phase ATDD, epics and the readiness gate. `src/` holds interface stubs that throw `NotImplementedError`, ports, and test doubles; no production logic, and `bmad-build` / `bmad-build-auto` were never invoked.
 
@@ -43,7 +43,7 @@ Verified by both partners (Partner A on Windows after the CRLF / buffer fixes, P
 
 ## Honest status (what a reader should know)
 
-* **Readiness gate = PASS, signed by both partners on 2026-10-26.** Partner B accepted DEC-14, DEC-16 and DEC-18; Partner A confirmed AMD-14, 14b and AMD-15..20 and closed the independent test re-review (TQ-A). If an AMD changes later, the gate is re-run (`npm run ci` + the two `sprint_plan.py` commands).
+* **Readiness gate = PASS, signed by both partners on 2026-10-20.** Partner B accepted DEC-14, DEC-16 and DEC-18; Partner A confirmed AMD-14, 14b and AMD-15..20 and closed the independent test re-review (TQ-A). If an AMD changes later, the gate is re-run (`npm run ci` + the two `sprint_plan.py` commands).
 * **Defects found in the Phase 0-2 package** and fixed in contracts v1.1 / v1.2 (REV-DET-07..30): overflow behaviour, cold start as an error, alert uniqueness across an hour boundary, ring-buffer sizing for 33 GPUs, missing sample data in `evaluateAlertRule`, **an alarm threshold that could never be reached with nested windows (spike ratio capped at 10.0)**, missing forensic / heatmap / peak-contention contracts, batch-id storage, units. Each is traced in `reviews/review-detailed-design.md` and DEC-12..18.
 * **The suite was never run against an implementation** (the stop-point rule forbids writing one). Its correctness rests on independent oracles, executed and mutated DDL, a guard that was itself probed, hand-checked arithmetic and property tests (limit TQ-14), plus the independent re-review by Partner A (TQ-A, PASS). The first story's pull request must show each RED → GREEN transition.
 * **TEA skills:** `bmad-testarch-*` and `bmad-sprint-planning` are not loadable inside the session that produced this package; the sprint script was run directly and the TEA workflows were followed by hand. `test/tea-skill-matrix.md` says so line by line. (See `test/tea-runs/` for any later skill run.)
@@ -60,7 +60,7 @@ Verified by both partners (Partner A on Windows after the CRLF / buffer fixes, P
 | Gate verdict claimed without output (−10) | Terminal output is embedded in `planning/readiness-gate-report.md` section 3. |
 | Cross-module dependency (−10) | None: the module touches no other module. |
 
-## Partner A review (Juand, 2026-10-26)
+## Partner A review (Juand, 2026-10-20)
 
 * **Windows verification:** ran the whole quality gate on Windows. Two portability defects appeared and were fixed in commit `8aafb16`: `readiness-check` and `trace-check` failed on CRLF line endings (the regex over headings), and `red-guard` needed a larger `maxBuffer` for `spawnSync`. After the fixes: `117 passed`, `46 matrix rows / 136 test ids traced`, `READINESS CHECK: no structural problem found (4 epics, 16 stories)`, `157 ATDD cases - 157 red for the right reason`.
 * **Decisions confirmed:** AMD-14 and AMD-14b (nested windows cap the ratio at 10.0; baseline of 270 s; clearing by P99 <= 8,000 ms for 3 cycles), AMD-15 (peak-contention windows, FR-04), AMD-16 (Operation 4 forensics, FR-03), AMD-17 and AMD-17b (1 Hz loop with 5 s hysteresis; capacity-dropped events count as heartbeats), AMD-18 and AMD-18b (`FleetSnapshotDTO`; window maxima for temperature and VRAM; arrival-based Storm Mode), AMD-19 (`ingested_batches`, 1-hour replay window, pruning index), AMD-20 (`hour_epoch_s`, uncomputable fields removed).
@@ -70,7 +70,7 @@ Verified by both partners (Partner A on Windows after the CRLF / buffer fixes, P
 
 | Role | Name | Decision | Date |
 |---|---|:-:|:-:|
-| Architect Lead | Juand (Partner A) | **APPROVED** | 2026-10-26 |
-| Test Lead | Juan Andrés Cano (Partner B) | **APPROVED** | 2026-10-26 |
+| Architect Lead | Juand (Partner A) | **APPROVED** | 2026-10-20 |
+| Test Lead | Juan Andrés Cano (Partner B) | **APPROVED** | 2026-10-20 |
 
 *Note: an earlier Spanish `ENTREGA.md` written by Partner A (commit `8aafb16`) was merged into this file; its content is preserved in the sections above and in git history.*
