@@ -122,6 +122,8 @@ CREATE TABLE IF NOT EXISTS ingested_batches (
     batch_id TEXT PRIMARY KEY CHECK (length(batch_id) = 36),
     ingested_at_ms INTEGER NOT NULL CHECK (ingested_at_ms > 0)
 );
+-- Pruning (DELETE ... WHERE ingested_at_ms < now - 3,600,000) runs every closed window and must not scan the table
+CREATE INDEX IF NOT EXISTS idx_ingested_batches_time ON ingested_batches(ingested_at_ms);
 
 -- ----------------------------------------------------------------------------
 -- 4b. NODE FORENSICS (FR-03, Op4): frozen at the moment a node leaves HEALTHY, deleted when it returns to HEALTHY
@@ -147,7 +149,7 @@ CREATE TABLE IF NOT EXISTS node_forensics (
 CREATE TABLE IF NOT EXISTS rollup_hourly_metrics (
     node_id TEXT NOT NULL,
     gpu_index INTEGER NOT NULL,
-    hour_epoch INTEGER NOT NULL CHECK (hour_epoch > 0), -- Unix SECONDS truncated to 1 hour (contracts.md Op3 Q1a; hour_start_ms = hour_epoch * 1000)
+    hour_epoch_s INTEGER NOT NULL CHECK (hour_epoch_s > 0), -- Unix SECONDS truncated to 1 hour (contracts.md Op3 Q1a; hour_start_ms = hour_epoch_s * 1000)
     gpu_hours_busy REAL NOT NULL CHECK (gpu_hours_busy >= 0.0 AND gpu_hours_busy <= 1.0001),
     gpu_hours_idle REAL NOT NULL CHECK (gpu_hours_idle >= 0.0 AND gpu_hours_idle <= 1.0001),
     -- GPU-hours in which the GPU was not HEALTHY (STALE / SILENT_TIMEOUT / RECOVERING / CORDONED) (AMD-8)
@@ -156,14 +158,14 @@ CREATE TABLE IF NOT EXISTS rollup_hourly_metrics (
     completion_tokens_total INTEGER NOT NULL CHECK (completion_tokens_total >= 0),
     primary_subject TEXT NOT NULL CHECK (primary_subject IN ('CS-101', 'CS-480', 'CS-530', 'FAC-RES', 'IDLE')),
     created_at_ms INTEGER NOT NULL,
-    PRIMARY KEY (node_id, gpu_index, hour_epoch),
+    PRIMARY KEY (node_id, gpu_index, hour_epoch_s),
     FOREIGN KEY (node_id, gpu_index) REFERENCES cluster_nodes(node_id, gpu_index) ON DELETE CASCADE,
     -- Physical Invariant INV-06 / AD-06: every GPU-hour is fully accounted for: busy + idle + unavailable = 1.0 ± 0.001
     CONSTRAINT chk_hourly_gpu_sum CHECK (ABS((gpu_hours_busy + gpu_hours_idle + gpu_hours_unavailable) - 1.0) <= 0.001)
 );
 
 CREATE INDEX IF NOT EXISTS idx_rollups_query_window 
-ON rollup_hourly_metrics(hour_epoch, primary_subject);
+ON rollup_hourly_metrics(hour_epoch_s, primary_subject);
 
 -- ----------------------------------------------------------------------------
 -- 6. AUDIT EVENTS LOG (Immutable Append-Only Compliance Record)

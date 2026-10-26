@@ -5,17 +5,21 @@
 
 ## 1. Verdict
 
-# CONCERNS
+# PASS
 
-**One line:** the plan is mechanically implementable as recorded (no orphan, no forward dependency, every test owned by one story, DDL/DTO/OpenAPI executable) but **three decisions are not yet confirmed by a human**, so it cannot honestly be called PASS today. Each concern below has a mitigation and an exact step that turns it into PASS. Proceeding to sprint planning is documented, not silent.
+**One line:** a developer can implement the 16 stories as recorded without inventing a decision: every requirement traces forward and back, no story depends on a later one, every test belongs to exactly one story, DDL / DTO / OpenAPI execute and parse, and Partner B has accepted every decision that was pending (DEC-14, DEC-16, DEC-18).
 
-| # | Concern | Why it matters | Mitigation now | Step to PASS | Owner |
-|:-:|---|---|---|---|:-:|
-| **C-1** | **AMD-14** (alarm baseline excludes the short window) is applied but not confirmed (DEC-14 PENDING). PRD FR-02 says "prior 300 seconds", which can also be read as the 300 s before the 30 s window. | If rejected or changed, Story 3.1 formulas and 3 test builders change (`breachWindow`, `calmWindow`, `ratioWindow`). | Story 3.1 starts only after the confirmation (its DoD says so); builders are isolated in one file. | Both partners record ACCEPT/MODIFY in DEC-14; update status; re-run this report. | Partner B + A |
-| **C-2** | **AMD-15..20** and the PRD alignments REV-DET-17..19 were applied by the AI inside Partner B's instruction to move fast, without a per-item answer (DEC-16 PENDING REVIEW). | They add Operation 4, `FleetSnapshotDTO`, `ingested_batches` and 6 other contract clauses; a reviewer may disagree with a choice. | Every change is listed in `reviews/review-detailed-design.md` section 6.3 with its fix, and was verified (DDL executed, `tsc --strict`, OpenAPI parsed, new red and green tests). | Partner B reviews `git diff` for AMD-15..20; Partner A confirms. | Partner B + A |
-| **C-3** | **Reviews and sign-offs still open:** Partner B approvals of the Phase 0 and Phase 1-2 reviews are PENDING by design; the independent re-review of the test suite (TQ-A) is open; the `bmad-testarch-*` skills were not run from this repository (see `test/tea-skill-matrix.md`). | Rubric items on independent verification and skill use. | Stated openly in each artifact. | Partner A re-reviews `reviews/review-test-quality.md`; run the TEA skills from a session opened in `task-first-solution/` if required. | Partner A |
+**What changed since the CONCERNS version of this report (earlier on 2026-10-26):** the three decisions that kept it at CONCERNS were closed. AMD-14 (alarm baseline) and AMD-15..20 were accepted by Partner B after a trade-off review, which also produced four corrections (AMD-14b, AMD-17b, AMD-18b, index and rename; `reviews/review-detailed-design.md` section 6.4, DEC-18).
 
-**Architect sign-off required for CONCERNS:** *Partner A (Juand - Architect Lead): [PENDING]* · *Partner B (Test Lead): [PENDING]*.
+**Residual sign-offs (governance, not implementability gaps; recorded openly):**
+
+| # | Item | Effect if it goes the other way | Owner |
+|:-:|---|---|:-:|
+| R-1 | Partner A (Juand) has not confirmed AMD-14..20 and the amended contracts / PRD alignments. | If he reverses an AMD, the affected stories and tests change; **this gate must be re-run** (`npm run ci` + `sprint_plan.py`, two commands). | Partner A |
+| R-2 | Independent re-review of the test suite (TQ-A in `reviews/review-test-quality.md`); the existing review was done by the author. | Possible new test findings. | Partner A |
+| R-3 | Signatures of Partner B on the Phase 0 and Phase 1-2 reviews are PENDING by design; the `bmad-testarch-*` skills were not run from this repository (`test/tea-skill-matrix.md`). | None on implementability. | Partner B |
+
+**Sign-off of this gate:** *Partner A (Juand - Architect Lead): [PENDING]* · *Partner B (Test Lead): [PENDING]*.
 
 ## 2. The six audit checks (workshop 4.2)
 
@@ -23,10 +27,10 @@
 |:-:|---|:-:|---|
 | 1 | Every FR/NFR traces forward to >= 1 story; every story traces back to a requirement | **PASS** | `readiness-check`: 5 FR + 8 NFR traced, 0 forward or backward orphan. Matrix `test/traceability-matrix.md` has 46 rows; 2 documented GAP rows are UI-only NFRs (NFR-02, NFR-07) covered by story DoD and `nfr-evidence.md`. |
 | 2 | Every UX screen state (Loading / Empty / Error / Success / Denied) has a backing contract + DTO | **PASS with note** | Map in `epics.md`: 4 surfaces x 4 states, each tied to a DTO or typed error. *Denied is not applicable:* SSO is mocked and the PRD defines no role-gating, so there is no contract to back it (accepted scope boundary). |
-| 3 | Every AD-n appears in >= 1 story's Binding invariants and has a red test | **PASS** | `readiness-check`: AD-01..AD-08 each bound; matrix lists red or guarding tests for every AD-n; `npm run test:atdd:guard` 153/153 red for the right reason. |
+| 3 | Every AD-n appears in >= 1 story's Binding invariants and has a red test | **PASS** | `readiness-check`: AD-01..AD-08 each bound; matrix lists red or guarding tests for every AD-n; `npm run test:atdd:guard` 157/157 red for the right reason. |
 | 4 | No epic depends on a later epic; no story on a later story | **PASS** | `readiness-check` compares the order of every "Depends on" id: 0 forward dependencies. Three tests were placed in later stories during authoring to remove forward dependencies: `C1-EDGE-c` to 3.2, `C1-Q5c` to 3.4, `X-AD07` to 4.3. |
-| 5 | Artifacts do not contradict each other | **PASS after 10 fixes; 1 open point** | 10 contradictions found and fixed (REV-DET-17..26: temperature range, PRD input names and outputs, missing peak window, missing forensic contract, missing heatmap DTO, batch id store, hour units, uncomputable DTO fields, two node-state sources, 1,000 ms vs 5,000 ms). Open: C-1 wording of the FR-02 baseline. Numeric NFRs (250/500 ms, 1.0 s, 15.0 +/- 0.5 s, 128 MB, 1,500 ms) are identical in PRD, epics and contracts. |
-| 6 | Every earlier review finding is triaged and, if Accepted, visibly fixed | **PASS with 3 open items** | Plan-2 reviews: 22 findings, 15 Accepted and fixed, 7 Rejected with rationale (`reviews/plan2-readiness-gate-report.md` section 3). Phase 0: 8 gaps, all Accepted, all resolved. Detailed design: REV-DET-01..26, all Accepted and fixed except REV-DET-16 (AMD-14, C-1). Test quality: 14 findings - 3 fixed (TQ-1, 5, 7), 1 partly fixed and deferred (TQ-2), 5 accepted with a documented limit or assumption (TQ-3, 4, 6, 10, 13), 2 deferred (TQ-11, 12), 2 rejected (TQ-8, 9), 1 limit stated (TQ-14) - plus TQ-A open (C-3). |
+| 5 | Artifacts do not contradict each other | **PASS** | 14 contradictions or gaps found and fixed (REV-DET-17..30): temperature range, PRD input names and outputs, missing peak window, missing forensic contract, missing heatmap DTO, batch id store, hour units, uncomputable DTO fields, two node-state sources, 1,000 ms vs 5,000 ms, alarm baseline, clearing during a long surge, dropped events as heartbeats, threshold-banded cell values. Numeric NFRs (250/500 ms, 1.0 s, 15.0 +/- 0.5 s, 128 MB, 1,500 ms) are identical in PRD, epics and contracts. |
+| 6 | Every earlier review finding is triaged and, if Accepted, visibly fixed | **PASS** | Plan-2 reviews: 22 findings, 15 Accepted and fixed, 7 Rejected with rationale (`reviews/plan2-readiness-gate-report.md` section 3). Phase 0: 8 gaps, all Accepted, all resolved. Detailed design: REV-DET-01..30, all Accepted and fixed. Test quality: 14 findings - 3 fixed (TQ-1, 5, 7), 1 partly fixed and deferred (TQ-2), 5 accepted with a documented limit or assumption (TQ-3, 4, 6, 10, 13), 2 deferred (TQ-11, 12), 2 rejected (TQ-8, 9), 1 limit stated (TQ-14); TQ-A is sign-off R-2. |
 
 ## 3. Terminal output (verbatim)
 
@@ -37,13 +41,13 @@ $ python3 sprint_plan.py generate --epic-file planning/epics.md --status-file im
 $ python3 sprint_plan.py validate --status-file implementation-artifacts/sprint-status.yaml
 {"ok": true, "action": "validate", "status_file": "implementation-artifacts/sprint-status.yaml", "valid": true, "problems": [], "legacy_mapped": []}
 ```
-First run created 24 entries (4 epics, 16 stories, 4 retrospectives); the run shown is the second, which proves idempotence (`new_entries: 0`, `preserved: 24`, `in_sync: true`). The script ran with `ruamel.yaml 0.18.6` loaded from a local wheel because `uv` is not installed here.
+The first run created 24 entries (4 epics, 16 stories, 4 retrospectives); the run shown is a later one and proves idempotence (`new_entries: 0`, `preserved: 24`, `in_sync: true`) after the epics text was amended. The script ran with `ruamel.yaml 0.18.6` loaded from a local wheel because `uv` is not installed here.
 
 ### 3.2 Readiness check (mechanical part of the audit)
 ```text
 $ npm run readiness:check
 
-4 epics, 16 stories; 5 FR + 8 NFR traced; 131 tests each owned by exactly one story
+4 epics, 16 stories; 5 FR + 8 NFR traced; 136 tests each owned by exactly one story
   Epic 1: 1.1, 1.2, 1.3, 1.4 - Liam sees the live fleet (walking skeleton)
   Epic 2: 2.1, 2.2, 2.3, 2.4 - Liam survives the 5,000 events-per-second storm (Mandatory Edge Case)
   Epic 3: 3.1, 3.2, 3.3, 3.4, 3.5 - Liam is alerted before the lab class fails
@@ -54,18 +58,18 @@ READINESS CHECK: no structural problem found
 ### 3.3 Whole quality gate
 ```text
 $ npm run ci
- ✓ test/harness/fixtures.test.ts  (36 tests) 222ms
- ✓ test/schema/schema.contract.test.ts  (34 tests) 91ms
- ✓ test/architecture/purity.test.ts  (46 tests) 14ms
-      Tests  116 passed (116)
-46 matrix rows, 131 test ids traced, 131 tags in code, 2 documented GAP rows, 8 bound invariant tests
-4 epics, 16 stories; 5 FR + 8 NFR traced; 131 tests each owned by exactly one story
+ ✓ test/harness/fixtures.test.ts  (36 tests) 242ms
+ ✓ test/schema/schema.contract.test.ts  (35 tests) 86ms
+ ✓ test/architecture/purity.test.ts  (46 tests) 16ms
+      Tests  117 passed (117)
+46 matrix rows, 136 test ids traced, 136 tags in code, 2 documented GAP rows, 8 bound invariant tests
+4 epics, 16 stories; 5 FR + 8 NFR traced; 136 tests each owned by exactly one story
   Epic 1: 1.1, 1.2, 1.3, 1.4 - Liam sees the live fleet (walking skeleton)
   Epic 2: 2.1, 2.2, 2.3, 2.4 - Liam survives the 5,000 events-per-second storm (Mandatory Edge Case)
   Epic 3: 3.1, 3.2, 3.3, 3.4, 3.5 - Liam is alerted before the lab class fails
   Epic 4: 4.1, 4.2, 4.3 - Department Management receives audited numbers
 READINESS CHECK: no structural problem found
-153 ATDD cases - 153 red for the right reason, 0 red for another reason, 0 not red (passed/skipped/todo)
+157 ATDD cases - 157 red for the right reason, 0 red for another reason, 0 not red (passed/skipped/todo)
 ```
 
 ## 4. Gate drill (Step 4.3)
@@ -83,15 +87,15 @@ Honest scale note: the times are tool times for a script run and a text restore,
 * **UI evidence is planned, not produced:** NFR-02 and NFR-07 (`nfr-evidence.md` N-02, N-07).
 * **No production logic was written** (Stop-Point Rule): `src/` holds interface stubs that throw `NotImplementedError`, ports, and test doubles.
 
-## 6. How this becomes PASS
+## 6. Keeping it PASS
 
-1. Partner B and Partner A set DEC-14 and DEC-16 to ACCEPT/MODIFY (C-1, C-2).
-2. Partner A re-reviews `reviews/review-test-quality.md` (TQ-A) and signs (C-3).
-3. Re-run `npm run ci` and `sprint_plan.py generate/validate`; paste the output in section 3; change section 1 to PASS.
+1. If Partner A confirms R-1, only the sign-off lines change.
+2. If he reverses or changes an AMD, edit the artifacts, re-run `npm run ci` and the two `sprint_plan.py` commands, paste the new output in section 3, and re-judge checks 1-6.
+3. Optional: Partner A re-reviews `reviews/review-test-quality.md` (R-2).
 
 ## 7. Sign-off
 
 | Role | Name | Decision | Date |
 |---|---|:-:|---|
 | Architect Lead | Partner A (Juand) | PENDING | - |
-| Test Lead | Partner B | PENDING | - |
+| Test Lead | Partner B | PENDING (decisions DEC-14, DEC-16, DEC-18 recorded as ACCEPT) | - |
