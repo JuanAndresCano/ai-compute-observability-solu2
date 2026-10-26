@@ -37,13 +37,13 @@ Each behaviour is verified at the **lowest** level that can falsify it.
 
 | Level | What is verified there | Planned share of the final suite | Today |
 |---|---|:-:|---|
-| **Unit — pure domain** | decimation statistics and window boundaries, P99 histogram, spike/breach formulas, cold-start guard, ring-buffer pointer, heartbeat state machine; property tests (fast-check) | **55 %** | 28 ATDD cases (`D-*`, `W-*`, `C1-I1a`, `C1-I2`, `C2-PURE`, `C2-I2a/b`) |
-| **Contract / integration — use case + SQLite** | atomicity and uniqueness, persistence, rollback, idempotent replay, parallel calls, typed errors with zero side effects, audit events and counters | 30 % | 121 ATDD cases + 33 schema constraint tests |
+| **Unit — pure domain** | decimation statistics and window boundaries, P99 histogram, spike/breach formulas, cold-start guard, ring-buffer pointer, heartbeat state machine; property tests (fast-check) | **55 %** | 29 ATDD cases (`D-*`, `W-*`, `C1-I1a`, `C1-I2`, `C2-PURE`, `C2-I2a/b`) |
+| **Contract / integration — use case + SQLite** | atomicity and uniqueness, persistence, rollback, idempotent replay, parallel calls, typed errors with zero side effects, audit events and counters | 30 % | 125 ATDD cases + 35 schema constraint tests |
 | **API — HTTP/WS adapters** | status codes, `Retry-After` header, WebSocket close 1008, OpenAPI conformance | 10 % | 0 — driving adapters are not stubbed in this unit; planned in Epic 1 stories |
 | **E2E — UI scenarios** | heatmap at 4 Hz, banner, drawer, WCAG | 5 % | 0 — UI not in the solutioning scope |
 | **Static fitness** | hexagon rules R1–R5, no wall clock, no SELECT-then-UPDATE | n/a | 46 (`test/architecture`) |
 
-**Honest note on the numbers.** The red ATDD suite is *acceptance-level through the inbound ports*, so by count it is dominated by the use-case level (121 of 149). The "55 % pure domain" target applies to the final suite: every story's Definition of Done requires the domain unit tests for its clauses (TDD), and the properties already present are the seed. This is recorded as a gap, not hidden (TG-12).
+**Honest note on the numbers.** The red ATDD suite is *acceptance-level through the inbound ports*, so by count it is dominated by the use-case level (125 of 157). The "55 % pure domain" target applies to the final suite: every story's Definition of Done requires the domain unit tests for its clauses (TDD), and the properties already present are the seed. This is recorded as a gap, not hidden (TG-12).
 
 ## 3. Coverage thresholds
 
@@ -76,7 +76,7 @@ Each behaviour is verified at the **lowest** level that can falsify it.
 ## 5. Entry / exit criteria
 
 **Entry (met):** contracts v1.1 + schemas executable; 5 fixtures with self-tests; ATDD red for the right reason; gaps TG-1..12 logged.
-**Exit for Phase 3:** `npm run ci` green (typecheck, 115 harness tests, trace check, red-guard 149/149); traceability has no orphan AD-n; Partner A confirms AMD-14.
+**Exit for Phase 3:** `npm run ci` green (typecheck, 117 harness tests, trace check, readiness check, red-guard 157/157); traceability has no orphan AD-n; Partner A confirms AMD-14.
 
 ## 6. Execution strategy (CI)
 
@@ -88,7 +88,7 @@ Each behaviour is verified at the **lowest** level that can falsify it.
 
 ## 7. Evidence that the plan is executable
 
-* `npm test` → 115 passed (36 fixture self-tests, 33 schema, 46 architecture); fixtures at ≥ 99 % line coverage.
-* `npm run test:atdd:guard` → 149 cases, 149 red for the right reason, 0 not red.
+* `npm test` → 117 passed (36 fixture self-tests, 35 schema, 46 architecture); fixtures at ≥ 99 % line coverage.
+* `npm run test:atdd:guard` → 157 cases, 157 red for the right reason, 0 not red.
 * Guard self-test: an injected passing case, an injected skipped case and an injected wrong-reason case make the guard exit 1.
 * Mutation check of the DDL: 11 of 11 constraint mutants are killed by the schema suite.

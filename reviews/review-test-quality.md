@@ -2,7 +2,7 @@
 
 **Target:** `test/atdd/observability_contracts.test.ts` (133 cases), `test/schema/` (31), `test/harness/` (32), `test/architecture/` (37), fixtures in `test/fixtures/`, `test/support/`
 **Reviewer:** Partner B (author of the suite) with Claude Code. **Not an independent review**: the author of the tests reviewed them. The rubric item "independent verification" is therefore open until **Partner A re-reviews this file and the suite** (listed as action TQ-A).
-**Date:** 2026-10-26 · **Criteria:** determinism, isolation, explicit assertions, no hard waits, traceable IDs, no tautologies, right-reason failure, strength against mutation.
+**Date:** 2026-10-26 · *Counts below are those of the review moment (133 red / 100 green). After the Phase 4 amendments the suite is 157 red / 117 green; the findings and checks still apply and `npm run ci` is the live source.* · **Criteria:** determinism, isolation, explicit assertions, no hard waits, traceable IDs, no tautologies, right-reason failure, strength against mutation.
 
 ## 1. Checks executed (all reproducible)
 

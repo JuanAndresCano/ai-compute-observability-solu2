@@ -22,13 +22,15 @@
 
 | **DEC-13** | Phase 1–2 amendment (Partner B) | Open observations OBS-1..4: rule scope, persisted hysteresis, bucket id, `is_empty` | AI proposed one handling per observation | **ACCEPT 4/4** (AMD-10..13) | **ADOPTED** | **Partner B** (Partner A to confirm) |
 
-| **DEC-14** | Phase 3 (ATDD data design) | Unreachable alarm threshold: nested windows cap the spike ratio at 10.0 (AMD-14) | AI built the first breach fixture from the contract formula and found a 11.2x surge could not be expressed | **PROPOSED, applied provisionally:** baseline = the 270 s before the short window; **pending confirmation by both partners** | **PENDING** | **Partner B** (Partner A to confirm) |
+| **DEC-14** | Phase 3 (ATDD data design) | Unreachable alarm threshold: nested windows cap the spike ratio at 10.0 (AMD-14) | AI built the first breach fixture from the contract formula and found a 11.2x surge could not be expressed | **ACCEPT (2026-10-26, Partner B):** baseline = the 270 s before the short window (option A) **plus AMD-14b**: clearing counts cycles with P99 <= 8,000 ms whatever the ratio | **ADOPTED** (Partner A to confirm) | **Partner B** |
 | **DEC-15** | Phase 3 (test preparation) | How to prepare tests without writing production logic; what the red suite covers; self-review disclosure | AI proposed an oracle implementation to prove the tests can go green | **REJECTED the oracle implementation** (stop-point rule); chose independent oracles, DDL mutation, red-guard probe | **ADOPTED** | **Partner B** |
 
-| **DEC-16** | Phase 4 (epics + readiness audit) | Close contract gaps (AMD-15..20, Operation 4, FleetSnapshotDTO) BEFORE writing stories | AI proposed writing the stories first and leaving the gaps as "contract-first tasks" inside stories | **MODIFIED by the AI under Partner B's standing instruction to move fast; Partner B review PENDING.** Gaps closed first, 6 findings REV-DET-20..24 + 3 PRD alignments | **PENDING REVIEW** | **Partner B** (to confirm) |
+| **DEC-16** | Phase 4 (epics + readiness audit) | Close contract gaps (AMD-15..20, Operation 4, FleetSnapshotDTO) BEFORE writing stories | AI proposed writing the stories first and leaving the gaps as "contract-first tasks" inside stories | **ACCEPT with modifications (2026-10-26, Partner B):** gaps closed first; after the trade-off review: AMD-17b, AMD-18b, AMD-19 index and AMD-20 rename added (DEC-18) | **ADOPTED** (Partner A to confirm) | **Partner B** |
 | **DEC-17** | Phase 4 (gate drill) | The first drill found a hole in the readiness control itself | First rename of a DTO in a story was NOT detected | **ACCEPT the fix:** regex widened (`DTO|Dto|dto|Type`), drill repeated and caught | **ADOPTED** | **Partner B** (to confirm) |
 
-*(Note: Phase 5 entries (wrap-up) continue from DEC-18.)*
+| **DEC-18** | Phase 4 (trade-off review of AMD-14..20) | Partner B asked for the trade-offs of every AI recommendation before deciding | AI listed options per AMD and flagged 3 weak points in its own choices | **ACCEPT all recommendations** (Partner B: "estoy de acuerdo con seguir tus recomendaciones") | **ADOPTED** | **Partner B** |
+
+*(Note: Phase 5 entries (wrap-up) continue from DEC-19.)*
 
 ---
 
@@ -192,3 +194,25 @@
 * **Fix:** the token pattern now matches `DTO|Dto|dto|Type|type`; the drill was repeated and reported "Story 3.4: DTO/type \"FleetCellDto\" does not exist in dto.ts"; the story was restored byte-identical and the check passed. Full log in `planning/readiness-gate-report.md`.
 * **Also observed:** `sprint_plan.py` (the skill's script) parsed both broken files without a warning (`in_sync: true`); it validates headings and statuses, not story content. The content checks are the judgement part of the gate and `readiness-check.mjs`.
 * **Pair Attribution:** AI executed the drill; Partner B to confirm.
+
+---
+
+### Entry DEC-18: Trade-off Review of AMD-14..20 and the Changes It Produced
+* **Timestamp:** 2026-10-26
+* **Lifecycle Phase:** Phase 4
+* **Trigger:** Partner B asked for the trade-offs behind each recommendation before deciding which to verify. The AI re-read its own choices and found three weak points; Partner B accepted all recommendations.
+* **Human Decision (Partner B): ACCEPT.** Applied changes:
+
+| AMD | Decision | Change made |
+|:-:|---|---|
+| 14 / 14b | Keep baseline = 270 s before the short window; **add** clearing by P99 alone | A surge longer than 30 s enters the baseline and lowers the ratio (240 s at 1,200 tok/s + 30 s at 13,440 tok/s gives a baseline of about 2,560 and a ratio of 5.2), so with the ratio in the clear condition the alert would clear during a live incident. Op2 Q2 steps 4-5 rewritten; tests `C2-Q2i`, `D-ENG-f`; verdict gets `p99Exceeded`. |
+| 15 | Keep (>= 99.9 %, no weekday filter) | none |
+| 16 | Keep | none |
+| 17 / 17b | Keep, **and** events dropped by the capacity rule count as heartbeats | Tail-drop always removes the end of a batch; a live node whose frames land there would turn STALE then SILENT_TIMEOUT, a false positive caused by the protection itself. Rejected batches still record nothing. Op1 Q2b; tests `C1-Q2d`, `C1-Q2e`. |
+| 18 / 18b | Keep the DTO; cell temperature and VRAM = window **maximum**; `storm_mode` counts **arrived** events | The PRD bands temperature and VRAM by threshold (>= 88 C red, >= 90 % magenta), so an average can hide a short peak. Arrival rate is the PRD FR-05 wording. Honest note: in this clock-driven model the accepted-count version would rarely differ, so no discriminating test exists for the storm flag; the change is for fidelity. Op1 Q2c, `dto.ts`, `C1-Q5a`. |
+| 19 | Keep, **add** `idx_ingested_batches_time` | Pruning runs every closed window; without the index each `DELETE` scans the table. Test `S-01g` checks the query plan. |
+| 20 | Keep, **rename** `hour_epoch` to `hour_epoch_s` | Every other time in the contract is milliseconds; the suffix makes the unit unmissable. |
+| PRD | Keep the alignments (REV-DET-17..19) | A sensor reading of 118 C is exactly the condition to alert on; rejecting it as invalid (old range 20-115) would hide it. |
+
+* **Verification:** `npm run ci` green; mutation of the new constraints (index, `batch_id` length CHECK, forensics 50-line CHECK, renamed rollup primary key) 4 of 4 killed.
+* **Pair Attribution:** Partner B decided; Partner A to confirm.
