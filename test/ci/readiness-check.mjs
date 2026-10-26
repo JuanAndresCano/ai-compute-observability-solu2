@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url))); // fileURLToPath: .pathname breaks on Windows
-const read = (p) => readFileSync(join(root, p), 'utf8');
+const read = (p) => readFileSync(join(root, p), 'utf8').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 const epicsMd = read('planning/epics.md');
 const prd = read('planning/prd.md');
 const code = ['test/atdd/observability_contracts.test.ts', 'test/schema/schema.contract.test.ts', 'test/architecture/purity.test.ts'].map(read).join('\n');
