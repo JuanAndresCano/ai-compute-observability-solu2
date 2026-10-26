@@ -1,0 +1,28 @@
+{
+  "name": "ai-compute-observability-solu2",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Module 11 - AI Infrastructure Observability Console. Solu-2 solutioning package: contracts, schemas, red-phase ATDD suite. No production logic (Solutioning Stop-Point Rule).",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config test/vitest.harness.config.ts",
+    "test:atdd": "vitest run --config test/vitest.atdd.config.ts",
+    "test:atdd:guard": "node test/ci/red-guard.mjs",
+    "test:coverage": "vitest run --config test/vitest.harness.config.ts --coverage",
+    "ci": "npm run typecheck && npm test && npm run test:atdd:guard && npm run trace:check",
+    "trace:check": "node test/ci/trace-check.mjs"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.14.0",
+    "@vitest/coverage-v8": "^1.6.0",
+    "better-sqlite3": "^11.3.0",
+    "fast-check": "^3.19.0",
+    "typescript": "^5.5.4",
+    "vitest": "^1.6.0"
+  }
+}
