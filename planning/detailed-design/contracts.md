@@ -1,13 +1,13 @@
 # Formal Behavioral Contracts Matrix (P, Q, I)
 ## Module 11: AI Infrastructure Observability Console
 **Document Path:** `planning/detailed-design/contracts.md`  
-**Status:** AMENDED v1.1 (Partner B review, 2026-10-26) — **approval by Partner B: PENDING**  
+**Status:** AMENDED v1.2 (Partner B review, 2026-10-26; Op4 added in Phase 4) — **approval by Partner B: PENDING**  
 **Author:** Juand (Partner A — Architect Lead)  
 **Amended by:** Partner B (Test Lead) — see `ai-log/decision-log-solu2.md` DEC-12  
 **Applicable Standard:** Design-by-Contract (DbC), Hexagonal Architecture, BMad TEA Standards  
 **Language Rule Enforcement:** ZERO elastic words (*efficiently, appropriately, securely, quickly, gracefully, reasonable, robust, properly, as needed, scalable, user-friendly, etc.* have been eliminated and replaced by explicit types, numbers, ranges, and status codes).
 
-**Amendment summary (v1.0 → v1.1):** AMD-1 overflow becomes tail-drop with visible `dropped_count`; AMD-2 cold start becomes a result status, not an error; AMD-3 alert uniqueness moves to `(trigger_rule, node_id)`; AMD-4 ring buffer sized for 33 GPU series; AMD-5 error catalog reduced to 8 codes, every code bound to a trigger; AMD-6 latency budgets cite the correct NFR; AMD-7 temperature range single-sourced; AMD-8 hourly rollup gains `gpu_hours_unavailable`; AMD-9 `evaluateAlertRule` receives its sample data in `SlidingWindowDTO`, and `ingestMetricBatch` validates and accumulates `inference_metrics`; AMD-10 `evaluateAlertRule` evaluates only `TOKEN_SPIKE_AND_LATENCY_BREACH` (the unspecified `THERMAL_CRITICAL_THRESHOLD` is removed); AMD-11 the 3-cycle hysteresis counter is persisted in `operational_alerts`; AMD-12 `decimation_bucket_id` identifies the 250 ms window; AMD-13 `is_empty` is machine-checkable; AMD-14 (**pending confirmation by both partners**) the token baseline excludes the short window.
+**Amendment summary (v1.0 → v1.1):** AMD-1 overflow becomes tail-drop with visible `dropped_count`; AMD-2 cold start becomes a result status, not an error; AMD-3 alert uniqueness moves to `(trigger_rule, node_id)`; AMD-4 ring buffer sized for 33 GPU series; AMD-5 error catalog reduced to 8 codes, every code bound to a trigger; AMD-6 latency budgets cite the correct NFR; AMD-7 temperature range single-sourced; AMD-8 hourly rollup gains `gpu_hours_unavailable`; AMD-9 `evaluateAlertRule` receives its sample data in `SlidingWindowDTO`, and `ingestMetricBatch` validates and accumulates `inference_metrics`; AMD-10 `evaluateAlertRule` evaluates only `TOKEN_SPIKE_AND_LATENCY_BREACH` (the unspecified `THERMAL_CRITICAL_THRESHOLD` is removed); AMD-11 the 3-cycle hysteresis counter is persisted in `operational_alerts`; AMD-12 `decimation_bucket_id` identifies the 250 ms window; AMD-13 `is_empty` is machine-checkable; AMD-14 (**pending confirmation by both partners**) the token baseline excludes the short window; AMD-15 the executive report lists peak-contention hours (FR-04); AMD-16 adds Operation 4 `getNodeForensics` and the `NodeMonitorService.tick()` capture clause (FR-03), re-introducing `ERR_UNKNOWN_NODE_ID` bound to Op4 P1 and adding `ERR_NODE_HEALTHY`; AMD-19 batch ids are persisted in `ingested_batches` with a 1-hour replay window; AMD-20 `hour_epoch` is Unix seconds, `by_subject` fields and `node_aggregates` fields are defined (average temperature/utilization removed: not computable from rollups); AMD-18 `FleetSnapshotDTO` backs the heatmap, Storm Mode and STALE_CACHED (Op1 Q2c); AMD-17 the evaluation loop runs every 1,000 ms while hysteresis counts one cycle per 5,000 ms, and every accepted telemetry event is a heartbeat (Op1 Q2b).
 
 ---
 
@@ -38,13 +38,15 @@
     Invariant of the result: `accepted_count + dropped_count = batch.events.length`, except for a replayed `batch_id` (see Concurrency).
   * **Q2:** For each accepted event, state mutation in the active $250\text{ ms}$ decimation window computes updated scalar statistics: $\text{min} = \min(\text{current\_min}, x)$, $\text{max} = \max(\text{current\_max}, x)$, $\text{sum} = \text{sum} + x$, $\text{count} = \text{count} + 1$, $\text{last} = x$. If `clock.nowMs() - window.started_at_ms >= 250`, the active bucket is closed and its summary tuple is committed to `TelemetryRingBuffer` at slot `(write_ptr + 1) % 7200`. In the SQLite persistence store, duplicate points with identical `(node_id, gpu_index, timestamp_ms)` trigger an idempotent `INSERT OR IGNORE`.  
     For each inference metric packet: `total_latency_ms` is added to the 100-bucket histogram (bucket index $= \min(99, \lfloor \text{total\_latency\_ms} / 200 \rfloor)$, so any latency $\ge 20,000\text{ ms}$ is counted in bucket 99), and `prompt_tokens` is added to the per-second prompt-token counters. These accumulators are the only source of the `SlidingWindowDTO` consumed by Operation 2. Inference metrics are folded immediately into fixed-size accumulators and are not subject to the 10,000-event capacity rule.
+  * **Q2b (heartbeat, FR-03):** every accepted event also records a heartbeat for its `node_id` at `clock.nowMs()` in `NodeHeartbeatWatchdog`; a node with no accepted event is silent. Dropped and rejected events record nothing.
+  * **Q2c (fleet snapshot, FR-01/FR-05, AMD-18):** each time a decimation window closes, exactly one `FleetSnapshotDTO` is dispatched through `UiDispatchPort`: `bucket_start_ms` of the closed window; 33 `cells` ordered by `node_id` then `gpu_index`, each with the node state from the watchdog, `freshness = "STALE_CACHED"` iff the state is not `HEALTHY` (the cell then carries the last known values), the window average of temperature and utilization, the last VRAM value; `storm_mode = true` iff more than 1,000 raw events were accepted in the 1,000 ms before the window closed; `dropped_total` = cumulative `dropped_count`.
   * **Q3:** Emits audit event `telemetry.batch.ingested` with payload `{ accepted_count, dropped_count, decimation_bucket_id }`. If `dropped_count > 0`, increments Prometheus counter metric `telemetry_events_dropped_total` by `dropped_count`.
   * **Q4:** Explainability payload in result cites `rule_id: "AD-01-DECIMATION-4HZ"`, `observed_rate: batch.events.length`, `buffer_capacity: 10000`, `decimation_window_ms: 250`, `free_slots: free`.
   * **Q-fail:** If P1, P2, or P3 with `free = 0` is violated, no `IngestionResultDTO` is returned (an `ErrorBodyDTO` is returned), zero events are written to the database or ring buffer, the write pointer is unchanged, and `telemetry_events_dropped_total` is unchanged. If the repository port raises a storage failure, the operation returns `ERR_DATABASE_UNAVAILABLE` (HTTP 503), the SQLite transaction is rolled back, and zero events are written.
 * **Invariant (I):**
   * **I1:** Ring buffer memory footprint is statically bounded to exactly $33\text{ GPU series} \times 6\text{ metrics} \times 7,200\text{ slots} \times 4\text{ bytes} = 5,702,400\text{ bytes}$ ($\approx 5.70\text{ MB}$), where the 33 series are 31 workstation GPUs plus 2 GPUs of `server-gpu-01`, each stored independently (never averaged); zero dynamic heap allocations occur during streaming. Bound to: **AD-01, AD-02, AD-08**.
-  * **I2:** Main UI state dispatch frequency is bounded to exactly $\le 4.0\text{ dispatches/second}$ ($1\text{ tick per } 250\text{ ms}$). Bound to: **AD-01**.
-* **Concurrency / Idempotency:** Concurrent batch calls across ingestion threads are serialized via SQLite atomic transaction `BEGIN IMMEDIATE` or Web Worker single-threaded event loop. Resending a batch with identical `batch_id` is idempotent and returns `accepted_count: 0, dropped_count: 0` without advancing ring buffer write pointers.
+  * **I2:** Main UI state dispatch frequency is bounded to exactly $\le 4.0\text{ dispatches/second}$ ($1\text{ snapshot per } 250\text{ ms}$). Bound to: **AD-01**.
+* **Concurrency / Idempotency:** Concurrent batch calls across ingestion threads are serialized via SQLite atomic transaction `BEGIN IMMEDIATE` or Web Worker single-threaded event loop. `batch_id` is registered with one `INSERT OR IGNORE INTO ingested_batches` (1 row inserted = new batch, 0 rows = replay); rows older than $3{,}600{,}000\text{ ms}$ are deleted in the same transaction each time a window closes, so a replay after one hour counts as a new batch. Resending a batch with identical `batch_id` inside that hour is idempotent and returns `accepted_count: 0, dropped_count: 0` without advancing ring buffer write pointers.
 * **Time:** Governed by `clock: ClockPort`. Bucket interval follows half-open temporal window $[T_{\text{bucket\_start}}, T_{\text{bucket\_start}} + 250\text{ ms})$.
 * **Latency Budget (design budget, not a PRD NFR):** Processing of a 1,250-event batch ($250\text{ ms}$ slice of $5,000\text{ ev/s}$) completes with $P_{95} \le 15.0\text{ ms}$ on a single CPU core. Derived from NFR-01 ($5,000\text{ ev/s}$ sustained, hence 1,250 events per $250\text{ ms}$) and NFR-02 (heatmap update $\le 500\text{ ms}$ under storm, so ingestion consumes $3\%$ of it).
 
@@ -90,7 +92,7 @@
   * **I1:** At most 1 active alert exists per `(trigger_rule, node_id)` at any instant; a second active row is physically barred by the partial unique index `idx_unique_active_alert ON operational_alerts(trigger_rule, node_id) WHERE resolved_at_ms IS NULL`. `incident_key` is unique across all rows (resolved or not) and identifies one incident. Bound to: **AD-03, AD-05**.
   * **I2:** $P_{99}$ latency calculation uses a static 100-bucket histogram, enforcing deterministic $O(1)$ memory ($< 1\text{ KB}$) and execution time $\le 5.0\text{ ms}$. Bound to: **AD-03**.
 * **Concurrency / Idempotency:** Atomic SQLite conditional insert (Q2 step 3). Two parallel breaching calls produce exactly 1 row; both return `status = "TRIGGERED"` with the same `alert_id`; exactly 1 `alert.anomaly.triggered` event is emitted. A repeated call with the same `window` returns the same `status` and creates 0 additional rows.
-* **Time:** Governed by `clock: ClockPort`. The assembled windows cover the half-open intervals $W_{\text{short}} = [\text{now} - 30000, \text{now})$ and $W_{\text{long}} = [\text{now} - 300000, \text{now})$ (so the baseline interval is $[\text{now} - 300000, \text{now} - 30000)$); `evaluated_at_ms`, `triggered_at_ms` and `resolved_at_ms` are read from `clock.nowMs()`.
+* **Time:** Governed by `clock: ClockPort`. The scheduler (`NodeMonitorService.tick()`) calls the evaluation every $1{,}000\text{ ms}$ (PRD FR-02) while the hysteresis counter advances at most once per $5{,}000\text{ ms}$ cycle (Q2 step 4), so a clear takes three cycles. The assembled windows cover the half-open intervals $W_{\text{short}} = [\text{now} - 30000, \text{now})$ and $W_{\text{long}} = [\text{now} - 300000, \text{now})$ (so the baseline interval is $[\text{now} - 300000, \text{now} - 30000)$); `evaluated_at_ms`, `triggered_at_ms` and `resolved_at_ms` are read from `clock.nowMs()`.
 * **Latency Budget (design budget, not a PRD NFR):** Alert rule evaluation across all 32 nodes completes with $P_{95} \le 5.0\text{ ms}$. Derived from NFR-03 (alarm dispatched $\le 1.0\text{ s}$ after the window satisfies both conditions): the evaluation consumes $0.5\%$ of that budget.
 
 ---
@@ -122,10 +124,13 @@
       };
       by_subject: Record<string, SubjectBreakdownDTO>;
       node_aggregates: NodeRollupDTO[];
+      peak_contention_windows: { hour_start_ms: number; utilization_pct: number }[]; // hours with cluster utilization >= 99.9 %, ascending, at most 168
       is_empty: boolean;               // True iff scanned_buckets_count === 0, or (utilized_gpu_hours === 0 AND total_prompt_tokens === 0 AND total_completion_tokens === 0)
       explanation: ExplanationDTO;
     }
     ```
+  * **Q1a (field definitions, AMD-20):** `hour_epoch` in `rollup_hourly_metrics` is Unix **seconds**. `by_subject[s].allocated_gpu_hours` = $\sum \text{gpu\_hours\_busy}$ of the scanned rows whose `primary_subject = s`; `prompt_tokens` and `completion_tokens` are the sums of the same rows; `share_pct` = $100 \times (\text{prompt} + \text{completion tokens of } s) / (\text{total prompt} + \text{total completion tokens})$, $0.0$ when the total is $0$. `node_aggregates` has one entry per scanned GPU with $\sum$ `gpu_hours_busy`, `gpu_hours_idle`, `gpu_hours_unavailable`.
+  * **Q1b (peak contention, FR-04):** for each rollup hour $h$ in the window, $u_h = 100 \times \sum \text{busy}_h / \sum (\text{busy}_h + \text{idle}_h + \text{unavailable}_h)$ over the scanned GPUs; the hour is listed in `peak_contention_windows` iff $u_h \ge 99.9$ (`hour_start_ms = hour_epoch × 1000`, `utilization_pct = u_h`). No weekday filter is applied (no timezone is specified); the UI groups by weekday.
   * **Q2:** Zero database mutations occur (pure read-only query). The query executes strictly against `rollup_hourly_metrics` table, scanning at most $168\text{ buckets} \times 33\text{ GPUs} = 5,544\text{ records}$ (31 workstation GPUs + 2 GPUs of `server-gpu-01`). Direct table scan on raw telemetry is blocked.
   * **Q3:** Emits audit event `report.utilization.generated` with `{ report_id, actor: "MANAGEMENT", range_hours }`. Increments metric `executive_reports_generated_total{status="SUCCESS"}`.
   * **Q4:** Explainability payload in `explanation` cites:
@@ -140,6 +145,42 @@
 * **Concurrency / Idempotency:** Pure idempotent query. Parallel executions return identical JSON results with zero data race.
 * **Time:** Governed by `clock: ClockPort`. Query interval $[from, to)$ is half-open.
 * **Latency Budget (NFR):** Query execution and JSON serialization complete with $P_{95} \le 1,500.0\text{ ms}$ under 5 concurrent management requests (PRD NFR-06).
+
+---
+
+### Operation 4: `getNodeForensics(nodeId: string, clock: ClockPort): NodeForensicsDTO`
+* **Layer:** Inbound Port (`ForensicsPort`) reading the preserved forensic record (`node_forensics`) and the heartbeat state; capture happens in `NodeMonitorService.tick()` (Capture clause below).
+* **Capture clause (state change, not a caller operation):** when `NodeMonitorService.tick()` observes a node leaving `HEALTHY` (first evaluation with silence $\ge 5{,}000\text{ ms}$) and no record exists for the current outage, it stores in one statement `INSERT ... ON CONFLICT (node_id) DO NOTHING` the last accepted telemetry snapshot, the last $\le 50$ lines returned by `NodeLogPort.tail(nodeId, 50)` (oldest first) and the job returned by `JobRegistryPort.activeJob(nodeId)`. The record is deleted when the node returns to `HEALTHY`. Lines emitted after the capture are never added.
+* **Precondition (P):**
+  * **P1:** `nodeId` matches `^(ws-gpu-(0[1-9]|[12][0-9]|3[01])|server-gpu-01)$`.  
+    $\to$ *Violation:* `ERR_UNKNOWN_NODE_ID` (HTTP 404 Not Found).
+  * **P2:** the node state is one of `STALE`, `SILENT_TIMEOUT`, `RECOVERING`, `CORDONED`.  
+    $\to$ *Violation (`HEALTHY`):* `ERR_NODE_HEALTHY` (HTTP 409 Conflict).
+* **Postcondition (Q):**
+  * **Q1:** Returns `NodeForensicsDTO` with schema:
+    ```typescript
+    {
+      node_id: string;
+      state: "STALE" | "SILENT_TIMEOUT" | "RECOVERING" | "CORDONED";
+      silence_duration_ms: number;          // = clock.nowMs() - last_heartbeat_ms
+      last_snapshot: NodeTelemetryPacketDTO | null;
+      degradation_timeline: { timestamp_ms: number; temperature_celsius: number; vram_used_bytes: number }[]; // 250 ms buckets of the 300 s before last_heartbeat_ms, ascending, at most 1,200 points
+      log_tail: string[];                   // at most 50 lines, oldest first, frozen at capture
+      last_job: { job_id: string; user: string; subject: string; model: string; submitted_at_ms: number } | null;
+      recommendation: "CORDON_RECOMMENDED" | "NONE"; // CORDON_RECOMMENDED iff state === "SILENT_TIMEOUT"
+      explanation: ExplanationDTO;
+    }
+    ```
+  * **Q2:** Zero database mutations (pure read).
+  * **Q3:** Emits audit event `node.forensics.viewed` with `{ node_id, state, actor: "OPERATOR" }`. Increments metric `forensic_views_total{state}`.
+  * **Q4:** `explanation` cites `rule_id: "AD-04-WATCHDOG"`, observed values `silence_duration_ms`, `consecutive_missed`, `state`, and thresholds `timeout_ms: 15000`, `heartbeat_interval_ms: 5000`.
+  * **Q-fail:** On P1 or P2 violation an `ErrorBodyDTO` is returned, zero rows are read beyond the state lookup, no audit event, no metric. A storage failure returns `ERR_DATABASE_UNAVAILABLE` (HTTP 503).
+* **Invariant (I):**
+  * **I1:** `log_tail` has at most 50 lines and never changes between capture and the node's return to `HEALTHY`; enforced by `CHECK (json_valid(log_tail_json) AND json_array_length(log_tail_json) <= 50)` on `node_forensics` and by `ON CONFLICT (node_id) DO NOTHING`. Bound to: **AD-04**.
+  * **I2:** `degradation_timeline` timestamps are strictly ascending and all $\le$ `last_heartbeat_ms`. Bound to: **AD-04, AD-02**.
+* **Concurrency / Idempotency:** Pure read; two simultaneous `tick()` captures for one node leave exactly 1 record (`ON CONFLICT DO NOTHING`).
+* **Time:** `silence_duration_ms` is computed from `clock.nowMs()`; the state boundaries are half-open: `HEALTHY` for $\Delta t < 5{,}000$, `STALE` for $5{,}000 \le \Delta t < 15{,}000$, `SILENT_TIMEOUT` for $\Delta t \ge 15{,}000$.
+* **Latency Budget:** the PRD states no NFR for this view; none is asserted (`test/nfr-evidence.md` records it as an unknown threshold, not an invented one).
 
 ---
 
@@ -168,9 +209,11 @@ Every code below is raised by at least one named clause; a code with no trigger 
 | `ERR_INVALID_DATE_RANGE` | **400** | Op3 P1 | Report query range is inverted ($from \ge to$) or duration $> 7\text{ days}$. | `"Invalid reporting window [{from_ms}, {to_ms}): duration must be positive and <= 168 hours (7 days)."` | **N** |
 | `ERR_FUTURE_REPORT_QUERY` | **422** | Op3 P2 | Report query `to_timestamp_ms` extends beyond current clock time. | `"Report query upper bound {to_ms} extends into the future relative to current clock {now_ms}."` | **N** |
 | `ERR_INVALID_ACADEMIC_SUBJECT` | **400** | Op3 P3 | Report requested for an uncatalogued subject filter. | `"Academic subject filter '{subject}' is invalid. Allowed: CS-101, CS-480, CS-530, FAC-RES, ALL."` | **N** |
-| `ERR_DATABASE_UNAVAILABLE` | **503** | Op1, Op2, Op3 Q-fail | The repository port raises a storage failure (SQLite engine or ring buffer connection failure). | `"Internal observability storage engine is temporarily unavailable."` | **Y** |
+| `ERR_UNKNOWN_NODE_ID` | **404** | Op4 P1 | `getNodeForensics` called with a node id outside the 32 registered nodes. | `"Node '{node_id}' is not registered in the 32-node cluster fleet."` | **N** |
+| `ERR_NODE_HEALTHY` | **409** | Op4 P2 | Forensics requested for a node whose state is `HEALTHY`. | `"Node '{node_id}' is HEALTHY (last heartbeat {silence_ms} ms ago); forensics exist only for STALE, SILENT_TIMEOUT, RECOVERING or CORDONED nodes."` | **N** |
+| `ERR_DATABASE_UNAVAILABLE` | **503** | Op1, Op2, Op3, Op4 Q-fail | The repository port raises a storage failure (SQLite engine or ring buffer connection failure). | `"Internal observability storage engine is temporarily unavailable."` | **Y** |
 
-*Removed in v1.1:* `ERR_COLD_START_INSUFFICIENT_SAMPLES` (now result status `SUPPRESSED_COLD_START`, AMD-2), `ERR_UNKNOWN_NODE_ID` (the P1 regex admits only the 32 registered nodes, AMD-5), `ERR_DUPLICATE_ACTIVE_ALERT` (duplicate is idempotent via `ON CONFLICT DO NOTHING`, AMD-5).
+*Removed in v1.1:* `ERR_COLD_START_INSUFFICIENT_SAMPLES` (now result status `SUPPRESSED_COLD_START`, AMD-2), `ERR_UNKNOWN_NODE_ID` from the ingestion path (the Op1 P1 regex admits only the 32 registered nodes, AMD-5; it returns in v1.2 bound to Op4 P1), `ERR_DUPLICATE_ACTIVE_ALERT` (duplicate is idempotent via `ON CONFLICT DO NOTHING`, AMD-5).
 
 ---
 
@@ -183,7 +226,7 @@ Every architectural invariant from `planning/ARCHITECTURE.md` (AD-01 to AD-08) i
 | **INV-01** | **AD-01** | `BucketDecimator.accumulate()`: Throttles dispatches to exactly 4 Hz ($250\text{ ms}$ interval); accepts at most `free` events per batch and tail-drops the rest while counting `dropped_count`. | `test_ingestion_enforces_4hz_dispatch_cap_under_5000_ev_storm` |
 | **INV-02** | **AD-02** | `TelemetryRingBuffer`: Statically sized `Float32Array(7200)` per (GPU series, metric) = 33 × 6 arrays = 5,702,400 bytes; pointer wrap modulo 7,200; zero heap reallocations. | `test_ring_buffer_memory_remains_static_after_100k_events` |
 | **INV-03** | **AD-03** | `AnomalyDetectionEngine.evaluate()`: Guard `if (sum(long_histogram) < 50) return SUPPRESSED_COLD_START`, evaluated before any metric computation. | `test_cold_start_suppresses_anomaly_alarm_below_50_samples` |
-| **INV-04** | **AD-04** | `NodeHeartbeatWatchdog.check()` + SQLite `CHECK(state IN ('HEALTHY','STALE','SILENT_TIMEOUT','RECOVERING','CORDONED'))`: Transitions node to `SILENT_TIMEOUT` at $\ge 15.0\text{ s}$ of silence; requires 3 consecutive heartbeats for recovery. | `test_node_ws22_transitions_to_silent_timeout_after_15s` |
+| **INV-04** | **AD-04** | `NodeHeartbeatWatchdog.check()` + SQLite `CHECK(state IN ('HEALTHY','STALE','SILENT_TIMEOUT','RECOVERING','CORDONED'))`: Transitions node to `SILENT_TIMEOUT` at $\ge 15.0\text{ s}$ of silence; requires 3 consecutive heartbeats for recovery. Forensic record: `node_forensics` `CHECK (json_array_length(log_tail_json) <= 50)` + `ON CONFLICT (node_id) DO NOTHING` (Op4 I1). | `test_node_ws22_transitions_to_silent_timeout_after_15s` |
 | **INV-05** | **AD-05** | `AlertDispatcher.dispatchHighPriority()` + SQLite `CREATE UNIQUE INDEX idx_unique_active_alert ON operational_alerts(trigger_rule, node_id) WHERE resolved_at_ms IS NULL` and `UNIQUE(incident_key)`: Bypasses 250ms decimation queue and prevents duplicate active alert rows. | `test_alert_fires_exactly_once_per_incident_until_cleared` |
 | **INV-06** | **AD-06** | `LocalRollupRepository.query7Day()`: SQL query restricted strictly to table `rollup_hourly_metrics` ($168\text{ rows per GPU}$, 33 GPUs); `CHECK chk_hourly_gpu_sum` forces busy + idle + unavailable = 1.0 ± 0.001 per row; scans on raw telemetry table rejected with error. | `test_7day_report_queries_strictly_hourly_rollups_not_raw` |
 | **INV-07** | **AD-07** | Ingestion pipeline tests bind to `FakeClock` and synthetic fixture loader; network calls outside localhost throw runtime assertion error. | `test_standalone_execution_requires_zero_cloud_network_io` |

@@ -56,6 +56,8 @@ export type ErrorCodeType =
   | 'ERR_INVALID_DATE_RANGE'
   | 'ERR_FUTURE_REPORT_QUERY'
   | 'ERR_INVALID_ACADEMIC_SUBJECT'
+  | 'ERR_UNKNOWN_NODE_ID'
+  | 'ERR_NODE_HEALTHY'
   | 'ERR_DATABASE_UNAVAILABLE';
 
 export interface ErrorBodyDTO {
@@ -73,6 +75,30 @@ export interface ExplanationDTO {
   thresholds: Record<string, number | string>;
   justification_text: string;
   empty_state_reason?: string | null;
+}
+
+// ============================================================================
+// 2b. FLEET SNAPSHOT: the payload behind the heatmap (UX Success state), the Storm Mode indicator and STALE_CACHED cells
+// ============================================================================
+
+export type CellFreshnessType = 'LIVE' | 'STALE_CACHED';
+
+export interface FleetCellDTO {
+  node_id: string;
+  gpu_index: number;
+  state: NodeStateType;
+  freshness: CellFreshnessType;      // STALE_CACHED iff state !== 'HEALTHY' (last known values shown)
+  temperature_celsius: number;       // average over the closed window, or last known value
+  vram_used_bytes: number;           // last value
+  vram_total_bytes: number;
+  gpu_utilization_pct: number;       // average over the closed window, or last known value
+}
+
+export interface FleetSnapshotDTO {
+  bucket_start_ms: number;           // start of the closed 250 ms window this snapshot summarises
+  cells: FleetCellDTO[];             // 33 cells ordered by node_id then gpu_index; [] only if no node is registered (UX Empty)
+  storm_mode: boolean;               // accepted raw events in the 1,000 ms before the window closed > 1,000
+  dropped_total: number;             // cumulative dropped events since start
 }
 
 // ============================================================================
@@ -195,8 +221,11 @@ export interface NodeRollupDTO {
   gpu_hours_busy: number;
   gpu_hours_idle: number;
   gpu_hours_unavailable: number;
-  average_temperature_celsius: number;
-  average_gpu_utilization_pct: number;
+}
+
+export interface PeakContentionWindowDTO {
+  hour_start_ms: number;   // rollup hour_epoch * 1000
+  utilization_pct: number; // 100 * busy / (busy + idle + unavailable) over the scanned GPUs in that hour
 }
 
 export interface ExecutiveReportDTO {
@@ -218,6 +247,39 @@ export interface ExecutiveReportDTO {
   };
   by_subject: Record<string, SubjectBreakdownDTO>;
   node_aggregates: NodeRollupDTO[];
+  peak_contention_windows: PeakContentionWindowDTO[]; // hours with utilization >= 99.9 %, ascending, at most 168
   is_empty: boolean;
+  explanation: ExplanationDTO;
+}
+
+// ============================================================================
+// 6. OPERATION 4: NODE FORENSICS DTOS (FR-03)
+// ============================================================================
+
+export type ForensicNodeStateType = Exclude<NodeStateType, 'HEALTHY'>;
+
+export interface DegradationPointDTO {
+  timestamp_ms: number;         // strictly ascending, <= last heartbeat
+  temperature_celsius: number;
+  vram_used_bytes: number;
+}
+
+export interface ForensicJobDTO {
+  job_id: string;               // e.g. "job-cs480-lora-run-84"
+  user: string;
+  subject: string;
+  model: string;
+  submitted_at_ms: number;
+}
+
+export interface NodeForensicsDTO {
+  node_id: string;
+  state: ForensicNodeStateType;
+  silence_duration_ms: number;  // clock.nowMs() - last_heartbeat_ms
+  last_snapshot: NodeTelemetryPacketDTO | null;
+  degradation_timeline: DegradationPointDTO[]; // at most 1,200 points (250 ms buckets, 300 s)
+  log_tail: string[];           // at most 50 lines, oldest first, frozen at capture
+  last_job: ForensicJobDTO | null;
+  recommendation: 'CORDON_RECOMMENDED' | 'NONE'; // CORDON_RECOMMENDED iff state === 'SILENT_TIMEOUT'
   explanation: ExplanationDTO;
 }

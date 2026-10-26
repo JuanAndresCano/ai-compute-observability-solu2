@@ -49,7 +49,7 @@ To adhere to the **Independent Executability** and **Hardware Agnosticism** mand
 * **Trigger:** Telemetry stream connection established from the cluster metrics generator.
 * **Inputs:** Node telemetry payload: `node_id`, `gpu_index`, `temperature_celsius`, `vram_used_bytes`, `vram_total_bytes`, `gpu_utilization_pct`, `active_jobs_count`, `timestamp`.
 * **Validation Rules:**
-  * `temperature_celsius` must be between $20.0^\circ\text{C}$ and $115.0^\circ\text{C}$.
+  * `temperature_celsius` must be between $-20.0^\circ\text{C}$ and $120.0^\circ\text{C}$ (sensor validity range; the colour bands below are unchanged). *[Amended 2026-10-26, REV-DET-17: was 20.0-115.0, which contradicted `contracts.md` Op1 P1.]*
   * `vram_used_bytes` must not exceed `vram_total_bytes` ($24\text{ GB}$ for workstations, $48\text{ GB}$ per GPU for the central server).
   * Missing node frames within 1 heartbeat cycle retain their last known state flagged as `STALE_CACHED`.
 * **Outputs:** 32-cell visual interactive grid updated at $\ge 4\text{ Hz}$ with color-coded severity:
@@ -60,13 +60,13 @@ To adhere to the **Independent Executability** and **Hardware Agnosticism** mand
 ### FR-02: Token Spike & $P_{99}$ Latency Anomaly Alarm
 * **System Responsibility:** The system shall compute a 30-second sliding window of prompt token throughput and $P_{99}$ inference latency across active model workers. If prompt tokens increase by $\ge 10\times$ relative to the 5-minute baseline and cause $P_{99} \text{ latency} > 8.0\text{ s}$, the system must trigger an automated, high-priority visual alarm banner.
 * **Trigger:** Execution of sliding-window evaluation loop every $1,000\text{ ms}$.
-* **Inputs:** Array of inference completion metrics: `request_id`, `model_name`, `prompt_tokens`, `completion_tokens`, `total_latency_ms`, `queue_wait_ms`, `timestamp`.
+* **Inputs:** Array of inference completion metrics: `request_id`, `node_id`, `gpu_index`, `model_id`, `academic_subject`, `prompt_tokens`, `completion_tokens`, `queue_duration_ms`, `inference_duration_ms`, `total_latency_ms`, `timestamp_ms`. *[Amended 2026-10-26, REV-DET-18: field names aligned to `InferenceMetricPacketDTO`.]*
 * **Validation Rules:**
   * Baseline token velocity calculated over prior 300 seconds (minimum 50 sample events required to avoid false positives during cluster warmup).
   * Current velocity calculated over prior 30 seconds.
 * **Outputs:** 
   * High-priority visual alarm banner displayed at the top of the console with pulsing amber/red border (`#E53E3E`).
-  * Structured alert payload containing: `spike_factor` (e.g., $11.4\times$), `p99_latency_observed` (e.g., $9.24\text{ s}$), `impacted_models`, `active_queue_depth`, and `timestamp`.
+  * Structured alert payload containing: `spike_factor` (e.g., $11.4\times$), `p99_latency_observed` (e.g., $9.24\text{ s}$), `saturated_nodes`, `primary_subject`, `sla_threshold_ms`, and `timestamp_ms`. *[Amended 2026-10-26, REV-DET-19: `impacted_models` and `active_queue_depth` are not produced by any contract; `AnomalyAlertPayloadDTO` carries `saturated_nodes` and `primary_subject`. Queue depth is deferred.]*
   * Explainability justification: *"Prompt token influx surged from 1,200 tok/s to 13,800 tok/s (+10.5x); queue saturation drove P99 latency to 9.1s exceeding the 8.0s SLA limit."*
 * **Measurable Test Condition:** Injecting a synthetic burst of 15,000 tokens/s with response times $> 8,000\text{ ms}$ fires the alarm within $\le 1.0\text{ s}$ of the 30-second window condition being met.
 

@@ -1,7 +1,7 @@
 -- Migration: 001_observability_schema.sql
 -- Module 11: AI Infrastructure Observability Console
 -- Target: SQLite 3 / PostgreSQL Compatible DDL
--- Enforces: AD-01, AD-02, AD-03, AD-04, AD-05, AD-06, AD-08 physically at storage level
+-- Enforces: AD-01, AD-02, AD-03, AD-04, AD-05, AD-06, AD-08 physically at storage level (v1.2: node_forensics)
 
 PRAGMA foreign_keys = ON;
 
@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS cluster_nodes (
     gpu_index INTEGER NOT NULL CHECK (gpu_index IN (0, 1)),
     node_type TEXT NOT NULL CHECK (node_type IN ('WORKSTATION', 'CENTRAL_SERVER')),
     vram_total_bytes INTEGER NOT NULL CHECK (vram_total_bytes IN (25769803776, 51539607552)),
+    -- Seed value only: the live node state is node_heartbeats.state (single source of truth, written by NodeMonitorService.tick())
     current_state TEXT NOT NULL DEFAULT 'HEALTHY' CHECK (current_state IN ('HEALTHY', 'STALE', 'SILENT_TIMEOUT', 'RECOVERING', 'CORDONED')),
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL,
@@ -115,12 +116,38 @@ CREATE TABLE IF NOT EXISTS node_heartbeats (
 );
 
 -- ----------------------------------------------------------------------------
+-- 3b. INGESTED BATCH IDS (Op1 idempotency, AMD-19): INSERT OR IGNORE -> 1 row = new batch, 0 rows = replay
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ingested_batches (
+    batch_id TEXT PRIMARY KEY CHECK (length(batch_id) = 36),
+    ingested_at_ms INTEGER NOT NULL CHECK (ingested_at_ms > 0)
+);
+
+-- ----------------------------------------------------------------------------
+-- 4b. NODE FORENSICS (FR-03, Op4): frozen at the moment a node leaves HEALTHY, deleted when it returns to HEALTHY
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS node_forensics (
+    node_id TEXT PRIMARY KEY CHECK (
+        node_id = 'server-gpu-01' OR
+        (node_id GLOB 'ws-gpu-[0-3][0-9]' AND substr(node_id, 8, 2) BETWEEN '01' AND '31')
+    ),
+    last_heartbeat_ms INTEGER NOT NULL CHECK (last_heartbeat_ms > 0),
+    last_snapshot_json TEXT CHECK (last_snapshot_json IS NULL OR json_valid(last_snapshot_json)),
+    -- Physical Invariant Op4 I1 / AD-04: at most 50 preserved log lines
+    log_tail_json TEXT NOT NULL CHECK (json_valid(log_tail_json) AND json_array_length(log_tail_json) <= 50),
+    last_job_json TEXT CHECK (last_job_json IS NULL OR json_valid(last_job_json)),
+    captured_at_ms INTEGER NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL
+);
+
+-- ----------------------------------------------------------------------------
 -- 5. EXECUTIVE 1-HOUR HOURLY ROLLUPS (7-Day Pre-Aggregated Analytic Storage)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS rollup_hourly_metrics (
     node_id TEXT NOT NULL,
     gpu_index INTEGER NOT NULL,
-    hour_epoch INTEGER NOT NULL CHECK (hour_epoch > 0), -- Unix timestamp truncated to 1 hour
+    hour_epoch INTEGER NOT NULL CHECK (hour_epoch > 0), -- Unix SECONDS truncated to 1 hour (contracts.md Op3 Q1a; hour_start_ms = hour_epoch * 1000)
     gpu_hours_busy REAL NOT NULL CHECK (gpu_hours_busy >= 0.0 AND gpu_hours_busy <= 1.0001),
     gpu_hours_idle REAL NOT NULL CHECK (gpu_hours_idle >= 0.0 AND gpu_hours_idle <= 1.0001),
     -- GPU-hours in which the GPU was not HEALTHY (STALE / SILENT_TIMEOUT / RECOVERING / CORDONED) (AMD-8)

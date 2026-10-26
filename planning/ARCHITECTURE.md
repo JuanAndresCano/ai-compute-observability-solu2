@@ -1,7 +1,9 @@
 # Technical Architecture & Architectural Invariants (AD-n)
 ## Module 11: AI Infrastructure Observability Console
-**Document Version:** 1.0.0  
-**Status:** APPROVED  
+**Document Version:** 2.0.0 (Solu-2 wrap-up, 2026-10-26)  
+**Status:** APPROVED v1.0.0 (Plan-2) + amendments listed below; Partner B approval of the amendments PENDING  
+**Detailed design (Solu-2):** [`detailed-design/contracts.md`](detailed-design/contracts.md) (Operations 1-4, typed error catalog, invariant binding table) · [`detailed-design/ports-and-adapters.md`](detailed-design/ports-and-adapters.md) · [`detailed-design/schemas/`](detailed-design/schemas/) (DDL, DTOs, events, OpenAPI) · [`epics.md`](epics.md) · [`readiness-gate-report.md`](readiness-gate-report.md) · [`../test/test-design.md`](../test/test-design.md) · [`../reviews/`](../reviews/)  
+**v2 changes to this file:** stack declared (section 1.1); ring buffer sized for 33 GPU series = 5,702,400 B (AD-02, AMD-4); rollup scan = 168 x 33 = 5,544 records (AD-06); temperature range -20..120 (section 3.1); AD-03 alarm baseline excludes the short window (AMD-14, pending confirmation). The rest of v1.0.0 is unchanged.  
 **Author:** Liam (Lead Cloud & Systems Engineer) & Juand (Lead System Architect)  
 **Target Environment:** Academic AI Compute Fabric (Standalone Local / Docker Compose)
 
