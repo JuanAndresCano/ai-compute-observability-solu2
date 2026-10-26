@@ -20,7 +20,12 @@
 
 | **DEC-12** | Phase 1–2 re-review (Partner B) | Defects in contracts/DDL/DTO found by the Test Lead; options chosen; sign-off governance | AI listed 9 defects with ≥2 options each and a recommendation | **ACCEPT 8 / MODIFY 1 / REJECT 1:** options chosen per item (see entry); item 4 challenged and re-analysed; pre-filled Partner B approvals rejected and reset to PENDING | **ADOPTED** | **Partner B** |
 
-*(Note: entries for Phase 3 and 4 (test strategy, ATDD, gate drill) continue from DEC-13 and are recorded by Partner B.)*
+| **DEC-13** | Phase 1–2 amendment (Partner B) | Open observations OBS-1..4: rule scope, persisted hysteresis, bucket id, `is_empty` | AI proposed one handling per observation | **ACCEPT 4/4** (AMD-10..13) | **ADOPTED** | **Partner B** (Partner A to confirm) |
+
+| **DEC-14** | Phase 3 (ATDD data design) | Unreachable alarm threshold: nested windows cap the spike ratio at 10.0 (AMD-14) | AI built the first breach fixture from the contract formula and found a 11.2x surge could not be expressed | **PROPOSED, applied provisionally:** baseline = the 270 s before the short window; **pending confirmation by both partners** | **PENDING** | **Partner B** (Partner A to confirm) |
+| **DEC-15** | Phase 3 (test preparation) | How to prepare tests without writing production logic; what the red suite covers; self-review disclosure | AI proposed an oracle implementation to prove the tests can go green | **REJECTED the oracle implementation** (stop-point rule); chose independent oracles, DDL mutation, red-guard probe | **ADOPTED** | **Partner B** |
+
+*(Note: entries for Phase 4 (epics, gate, gate drill) continue from DEC-16 and are recorded by Partner B.)*
 
 ---
 
@@ -120,3 +125,43 @@
 * **Artifacts Changed:** `planning/detailed-design/contracts.md` (v1.1), `ports-and-adapters.md`, `schemas/001_observability_schema.sql`, `schemas/dto.ts`, `schemas/openapi.yaml`, `schemas/events.md`, `planning/ARCHITECTURE.md`, `reviews/review-arch-implementability.md`, `reviews/review-detailed-design.md`.
 * **Note on historical entries:** DEC-10 and DEC-11 describe `UNIQUE(incident_key)` / `idx_unique_active_incident`; that wording is kept as the record of what was decided on 2026-10-19 and is superseded by AMD-3.
 * **Pair Attribution:** Partner B (Test Lead) decided; Partner A (Juand) to be informed and to confirm the amendments to his artifacts.
+
+---
+
+### Entry DEC-13: Resolution of Open Observations OBS-1..4 (AMD-10..13)
+* **Timestamp:** 2026-10-26
+* **Lifecycle Phase:** Phase 1–2 amendment, before Phase 3 tests depend on the clauses
+* **AI Persona / Skill Invoked:** Test-architect review (edge-case lens) with Claude Code
+* **Trigger Prompt / Context:** Partner B accepted the handling proposed in `reviews/review-detailed-design.md` §6.1 ("vamos con esas decisiones") and asked to continue to Phase 3.
+* **AI Generated Output:** One proposal per observation. For OBS-2 the AI chose a persisted counter over an in-domain object, applying the argument Partner A recorded in DEC-10 (volatile state is lost on restart), and added `last_cycle_index` so a duplicate call inside one 5,000 ms cycle cannot double-count. The AI also removed `THERMAL_CRITICAL_THRESHOLD` after finding no FR for it in `prd.md`.
+* **Human Decision (Partner B):** ACCEPT 4/4. Partner A has not yet reviewed these four amendments; his confirmation is pending.
+* **Verification:** DDL re-executed on SQLite 3.45.1; hysteresis `UPDATE` simulated at t = 5,000 / 5,100 / 10,000 / 15,000 / 20,000 ms (counter 1, 1, 2, 3→`CLEARED`, unchanged); `dto.ts` compiled with `tsc --strict`; `openapi.yaml` parsed.
+* **Artifacts Changed:** `contracts.md`, `001_observability_schema.sql`, `dto.ts`, `openapi.yaml`, `events.md`, `reviews/review-detailed-design.md`.
+* **Pair Attribution:** Partner B decided; Partner A to confirm.
+
+---
+
+### Entry DEC-14: AMD-14 - The Alarm Formula Cannot Fire With Nested Windows
+* **Timestamp:** 2026-10-26
+* **Lifecycle Phase:** Phase 3 - building the data for the first happy-path ATDD test (`C2-Q1a`)
+* **AI Persona / Skill Invoked:** Test-architect lens with Claude Code (test data derivation; not a skill run)
+* **Trigger Prompt / Context:** Partner B asked the AI to write the red suite. To express "baseline 1,200 tok/s, current 13,440 tok/s" the AI had to fill `long_window_prompt_tokens`. AMD-9 (accepted in DEC-12) made the short window part of the long window, so `long >= short`, and the contract baseline was `long / 300`.
+* **AI Generated Output:** A derivation: ratio = (S/30) / (L/300) = 10·S/L with S <= L, so ratio <= 10.0 and equals 10.0 only if every token of the last 300 s occurred in the last 30 s; exhaustive check over small integers confirmed the maximum is exactly 10.0. The same defect exists in `ARCHITECTURE.md` AD-03 (Plan-2), so it predates this unit. Two options: **A** baseline = `(long - short) / 270` (the 270 s before the short window); **B** make the windows disjoint (`[now-330 s, now-30 s)`) and drop the containment precondition.
+* **Human Decision (Partner B):** the AI applied A **provisionally** so the tests have a coherent oracle (it changes one formula and one time clause; B changes the assembler and the DTO more). **Not yet confirmed by Partner B nor Partner A** - the status column says PENDING.
+* **Why A:** it keeps the window shapes from the PRD (30 s and 300 s) and the P1 containment check from AMD-9; the baseline is still "the 300 s average" minus the burst under test.
+* **Artifacts Changed:** `contracts.md` (Op2 Q2 step 2, Time), `ARCHITECTURE.md` section 2.3, `dto.ts` comment, tests `C2-Q1a`, `C2-Q2a`, `C2-PURE`, `D-ENG-*`.
+* **If rejected:** only the helper builders `breachWindow`, `calmWindow`, `ratioWindow` and the cases in `C2-Q2a`/`D-ENG-a` need new numbers.
+* **Pair Attribution:** Partner B proposed; Partner A to confirm.
+
+---
+
+### Entry DEC-15: Preparing Tests Without Production Logic; Self-Review Disclosure
+* **Timestamp:** 2026-10-26
+* **Lifecycle Phase:** Phase 3 - Test Preparation
+* **AI Persona / Skill Invoked:** Murat-style test architect with Claude Code. The `bmad-testarch-*` skills could not be loaded from this repository; their templates and steps were followed by hand (`test/tea-skill-matrix.md` states this).
+* **AI Generated Proposal:** To prove the 133 tests can turn green, write a throw-away reference implementation outside the repository and run the suite against it.
+* **Human Evaluation & Critique:** The Solutioning Stop-Point Rule allows interface stubs and failing tests only; a hand-written implementation, even outside the submission, is production logic written by the council and defeats the purpose of the red phase (the next story must be driven by the tests, not by a hidden solution). The cost is that test correctness cannot be shown by a green run.
+* **Human Action Taken (REJECTION of the oracle implementation).** Alternative evidence adopted: (1) independent oracle for fixture validity (2,000 generated events, 0 violations); (2) DDL executed and mutated - 11 of 11 constraint mutants killed by `test/schema`; (3) red-guard probe - injected passing, skipped and wrong-reason cases all make it fail; (4) `trace-check` probe - a broken link makes it fail; (5) hand-checked arithmetic in the data builders; (6) property tests with fast-check. Residual risk is recorded as TQ-14 in `reviews/review-test-quality.md`: the first story must show each RED to GREEN transition.
+* **Other decisions in this phase:** the red seam is `System` + stubs throwing `NotImplementedError`, and rejection helpers re-throw it so a red test always fails because the stub is empty; physical invariants are tested in a separate green schema suite that turns red if a constraint is removed; the P0 storm is parameterised (`STORM_SECONDS`, 60 s in PR, 900 s nightly) instead of skipped, because the guard forbids skipped tests; the review in `reviews/review-test-quality.md` was done by the author and is marked non-independent until Partner A re-reviews it.
+* **Artifacts Changed:** `test/**`, `src/**` (interface stubs only), `package.json`, `tsconfig.json`, `reviews/review-test-quality.md`.
+* **Pair Attribution:** Partner B.
