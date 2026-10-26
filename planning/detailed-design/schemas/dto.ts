@@ -27,8 +27,10 @@ export type AlertSeverityType =
 
 export type AlertRuleIdType = 
   | 'TOKEN_SPIKE_AND_LATENCY_BREACH' 
-  | 'NODE_HEARTBEAT_TIMEOUT' 
-  | 'THERMAL_CRITICAL_THRESHOLD';
+  | 'NODE_HEARTBEAT_TIMEOUT';
+
+// The only rule evaluated by evaluateAlertRule (contracts.md Op2 P1)
+export type EvaluableRuleIdType = 'TOKEN_SPIKE_AND_LATENCY_BREACH';
 
 export type AlertEvaluationStatusType = 
   | 'TRIGGERED' 
@@ -130,11 +132,11 @@ export interface SlidingWindowDTO {
   short_histogram: number[];      // Exactly 100 integers >= 0; bucket i = latencies in [200*i, 200*(i+1)) ms; bucket 99 also holds >= 20,000 ms
   long_histogram: number[];       // Exactly 100 integers >= 0; long_histogram[i] >= short_histogram[i]
   short_window_prompt_tokens: number; // Integer >= 0, tokens in [now-30000, now)
-  long_window_prompt_tokens: number;  // Integer >= 0, tokens in [now-300000, now); >= short_window_prompt_tokens
+  long_window_prompt_tokens: number;  // Integer >= 0, tokens in [now-300000, now); >= short_window_prompt_tokens; baseline = (long - short) / 270 s
 }
 
 export interface AlertRuleDTO {
-  rule_id: AlertRuleIdType;
+  rule_id: EvaluableRuleIdType;
   throughput_spike_multiplier: number; // Exactly 10.0
   p99_latency_threshold_ms: number;     // Exactly 8000.0
   hysteresis_cycles_required: number;   // Exactly 3
@@ -161,7 +163,7 @@ export interface AnomalyAlertPayloadDTO {
 
 export interface AlertEvaluationDTO {
   evaluation_id: string;
-  rule_id: AlertRuleIdType;
+  rule_id: EvaluableRuleIdType;
   status: AlertEvaluationStatusType;
   evaluated_at_ms: number;
   alert_payload: AnomalyAlertPayloadDTO | null;

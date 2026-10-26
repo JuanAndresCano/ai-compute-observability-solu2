@@ -113,7 +113,7 @@ All events ingested or emitted by Module 11 adhere to this immutable envelope st
   "occurredAt": "2026-10-19T17:00:00.255Z",
   "schemaVersion": "1.0.0",
   "payload": {
-    "decimation_bucket_id": "BUCKET-ws-gpu-14-0-1792429200000",
+    "decimation_bucket_id": "BUCKET-1792429200000",
     "node_id": "ws-gpu-14",
     "gpu_index": 0,
     "accepted_count": 1250,

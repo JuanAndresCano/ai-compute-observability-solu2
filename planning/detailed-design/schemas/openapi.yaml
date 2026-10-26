@@ -270,7 +270,7 @@ components:
           example: 0
         decimation_bucket_id:
           type: string
-          example: BUCKET-ws-gpu-05-0-1792429200000
+          example: BUCKET-1792429200000
         ingested_at_ms:
           type: integer
         explanation:
@@ -284,7 +284,7 @@ components:
       properties:
         rule_id:
           type: string
-          enum: [TOKEN_SPIKE_AND_LATENCY_BREACH, NODE_HEARTBEAT_TIMEOUT, THERMAL_CRITICAL_THRESHOLD]
+          enum: [TOKEN_SPIKE_AND_LATENCY_BREACH]
         window:
           type: object
           required:

@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS operational_alerts (
         node_id = 'CLUSTER' OR node_id = 'server-gpu-01' OR
         (node_id GLOB 'ws-gpu-[0-3][0-9]' AND substr(node_id, 8, 2) BETWEEN '01' AND '31')
     ),
-    trigger_rule TEXT NOT NULL CHECK (trigger_rule IN ('TOKEN_SPIKE_AND_LATENCY_BREACH', 'NODE_HEARTBEAT_TIMEOUT', 'THERMAL_CRITICAL_THRESHOLD')),
+    trigger_rule TEXT NOT NULL CHECK (trigger_rule IN ('TOKEN_SPIKE_AND_LATENCY_BREACH', 'NODE_HEARTBEAT_TIMEOUT')),
     severity TEXT NOT NULL CHECK (severity IN ('INFO', 'WARNING', 'CRITICAL')),
     status TEXT NOT NULL DEFAULT 'TRIGGERED' CHECK (status IN ('TRIGGERED', 'CLEARED', 'ACKNOWLEDGED')),
     observed_baseline_tps REAL NOT NULL,
@@ -80,6 +80,9 @@ CREATE TABLE IF NOT EXISTS operational_alerts (
     explanation_json TEXT NOT NULL,
     triggered_at_ms INTEGER NOT NULL,
     resolved_at_ms INTEGER,
+    -- Persisted 3-cycle hysteresis (AMD-11): survives a process restart; cycle = floor(nowMs / 5000)
+    consecutive_clear_cycles INTEGER NOT NULL DEFAULT 0 CHECK (consecutive_clear_cycles BETWEEN 0 AND 3),
+    last_cycle_index INTEGER,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL,
     CONSTRAINT chk_alert_resolution_order CHECK (resolved_at_ms IS NULL OR resolved_at_ms >= triggered_at_ms)

@@ -33,6 +33,14 @@ Every functional file within Module 11 belongs to exactly one Hexagonal layer an
 | `ports/out/alert-repository.port.ts` | **Outbound Port** | Domain entities (`OperationalAlert`, `IncidentRecord`) | **AD-03, AD-05** |
 | `ports/out/rollup-repository.port.ts` | **Outbound Port** | Domain entities (`HourlyRollupRecord`, `ExecutiveSummary`) | **AD-06** |
 | `ports/out/event-dispatcher.port.ts` | **Outbound Port** | Domain events (`DomainEvent`) | Contract Q3 clauses |
+| `ports/out/ui-dispatch.port.ts` | **Outbound Port** | Primitive scalar types (`UiTick`) | **AD-01**, INV-01 (I2: at most 4 dispatches per second); added in Phase 3 (TG-6) |
+| `ports/out/metrics.port.ts` | **Outbound Port** | Primitive types (counter name, labels, increment) | Contract Q3 counters (`telemetry_events_dropped_total`, `alerts_emitted_total`, `executive_reports_generated_total`); added in Phase 3 (TG-6) |
+| `application/services/telemetry-ingestion.service.ts` | **Application Service (implements `TelemetryIngestionPort`)** | Domain, outbound ports | **AD-01, AD-02, AD-08**, Contract Op 1 |
+| `application/services/alert-evaluation.service.ts` | **Application Service (implements `AlertEvaluationPort`)** | Domain, outbound ports | **AD-03, AD-05**, Contract Op 2 |
+| `application/services/reporting.service.ts` | **Application Service (implements `ReportingPort`)** | `RollupRepositoryPort`, `ClockPort`, `EventDispatcherPort`, `MetricsPort` | **AD-06**, Contract Op 3 |
+| `composition.ts` | **Composition Root (wiring only)** | All layers; contains no decisions | Hard rules R1-R5 |
+| `domain/models/fleet.ts` | **Core Domain (static data)** | nothing | **AD-08** (33 GPU series) |
+| `adapters/sim/sequential-id-generator.ts` | **Driven Adapter (Test Double)** | `IdGeneratorPort` | GAP-07 |
 | `adapters/db/sqlite-telemetry-repo.ts` | **Driven Adapter (Persistence)** | `TelemetryRepositoryPort`, `better-sqlite3` driver | **AD-01, AD-08**, `001_schema.sql` |
 | `adapters/db/sqlite-alert-repo.ts` | **Driven Adapter (Persistence)** | `AlertRepositoryPort`, `better-sqlite3` driver | **AD-03, AD-05**, `001_schema.sql` |
 | `adapters/db/sqlite-rollup-repo.ts` | **Driven Adapter (Persistence)** | `RollupRepositoryPort`, `better-sqlite3` driver | **AD-06**, `001_schema.sql` |
