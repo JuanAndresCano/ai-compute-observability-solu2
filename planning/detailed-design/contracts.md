@@ -1,7 +1,7 @@
 # Formal Behavioral Contracts Matrix (P, Q, I)
 ## Module 11: AI Infrastructure Observability Console
 **Document Path:** `planning/detailed-design/contracts.md`  
-**Status:** AMENDED v1.2 (Partner B review, 2026-10-26; Op4 added in Phase 4) — **approval by Partner B: PENDING**  
+**Status:** APPROVED v1.2 (Partner A and Partner B sign-off, 2026-10-26); amended by Partner B review, Op4 added in Phase 4  
 **Author:** Juand (Partner A — Architect Lead)  
 **Amended by:** Partner B (Test Lead) — see `ai-log/decision-log-solu2.md` DEC-12  
 **Applicable Standard:** Design-by-Contract (DbC), Hexagonal Architecture, BMad TEA Standards  

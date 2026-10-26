@@ -12,7 +12,7 @@
 **Lead Reviewer:** Juand (Partner A — Architect Lead)  
 **Co-Reviewer:** Partner B (Test Lead)  
 **Date:** 2026-10-19  
-**Gate Verdict (v1.0, Partner A):** PASS — **superseded by the Partner B re-review in §6: 9 defects found, all ACCEPTED and fixed in contracts v1.1; Partner B approval PENDING**
+**Gate Verdict (v1.2):** PASS — v1.0 gate superseded by the Partner B re-review in §6 (REV-DET-07..30, all ACCEPTED and fixed); amendments AMD-10..20 confirmed by Partner A and approved by Partner B on 2026-10-26
 
 ---
 
@@ -73,8 +73,8 @@ The detailed design package (Contracts, Hexagonal Architecture, DDL Schema, DTOs
 ```
 Gate Verdict: PASS
 Approved for Phase 3 Handover:
-Partner A (Juand - Lead Architect): [SIGNED - 2026-10-19]
-Partner B (Lead Test Architect): [PENDING — to be signed by Partner B after reviewing §6 and the v1.1 artifacts]
+Partner A (Juand - Lead Architect): [SIGNED - 2026-10-26 - v1.0 on 2026-10-19; amendments AMD-10..20 confirmed and approved]
+Partner B (Juan Andrés Cano - Lead Test Architect): [SIGNED - 2026-10-26 - §6 re-review completed and v1.2 contracts approved]
 ```
 
 ---
@@ -110,7 +110,7 @@ Lens: adversarial + edge-case hunter, run by the Test Lead before writing any te
 
 | Finding | Lens | Severity | Defect | Triage | Fix |
 |:-:|:-:|:-:|---|:-:|---|
-| **REV-DET-16** | Edge-Case | HIGH | With the short window inside the long window (AMD-9), `Throughput(short) / Throughput(long) = 10·S/L <= 10.0`: the 10x alarm can only fire if all tokens of the last 300 s fell in the last 30 s. The same flaw is in `ARCHITECTURE.md` AD-03 from Plan-2. Found while building the data for `C2-Q1a`. | **ACCEPT (Partner B, 2026-10-26) - AMD-14 + AMD-14b; Partner A to confirm** | Baseline = `(long_window_prompt_tokens - short_window_prompt_tokens) / 270` (`contracts.md` Op2 Q2 step 2 and Time, `ARCHITECTURE.md` section 2.3, `dto.ts`). Decision record: DEC-14. |
+| **REV-DET-16** | Edge-Case | HIGH | With the short window inside the long window (AMD-9), `Throughput(short) / Throughput(long) = 10·S/L <= 10.0`: the 10x alarm can only fire if all tokens of the last 300 s fell in the last 30 s. The same flaw is in `ARCHITECTURE.md` AD-03 from Plan-2. Found while building the data for `C2-Q1a`. | **ACCEPT (Partner B, 2026-10-26) - AMD-14 + AMD-14b; confirmed by Partner A, 2026-10-26** | Baseline = `(long_window_prompt_tokens - short_window_prompt_tokens) / 270` (`contracts.md` Op2 Q2 step 2 and Time, `ARCHITECTURE.md` section 2.3, `dto.ts`). Decision record: DEC-14. |
 
 ### 6.3 Defects found while closing the Phase 4 readiness audit (2026-10-26)
 

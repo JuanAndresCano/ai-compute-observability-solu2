@@ -1,5 +1,7 @@
 # Module 11 — AI Infrastructure Observability Console (Solu-2)
 
+> **Delivery summary: [`ENTREGA.md`](ENTREGA.md)** (rubric → evidence, how to verify, honest status).
+
 Solutioning package for the Unit 4 / Solu-2 workshop: contracts, ports & adapters, schemas, a **red-phase** test suite, and (Phase 4) epics + readiness gate.
 **Solutioning Stop-Point Rule:** no production logic. `src/` holds interface stubs that throw `NotImplementedError`, test doubles and nothing else.
 
@@ -44,6 +46,6 @@ STORM_SECONDS=900 npm run test:atdd:guard   # the 15-minute storm (NFR-01), nigh
 5. **What is waiting for you (Partner A):**
    * Confirm or change AMD-14 (alarm baseline) and AMD-14b, AMD-15..20 (see DEC-14, DEC-16, DEC-18). Each one lists where it lives and what reverting costs.
    * Independent re-review of the test suite: `reviews/review-test-quality.md`, action TQ-A.
-   * Sign the review and gate lines marked `PENDING`.
+   * (Done on 2026-10-26: both partners signed; see `ENTREGA.md`.)
    * If you change an AMD, edit the artifact, re-run `npm run ci`, and re-judge `planning/readiness-gate-report.md`.
 6. **Optional:** the sprint file was generated with the `bmad-sprint-planning` script, which lives in `task-first-solution/.claude/skills/bmad-sprint-planning/scripts/sprint_plan.py` (outside this repo, needs `ruamel.yaml`). `implementation-artifacts/sprint-status.yaml` is committed, so you do not need to run it.
