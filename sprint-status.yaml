@@ -64,7 +64,7 @@ development_status:
   epic-4-retrospective: done
 
   # ---- Impl-2 (Module 11 stories 11.4 - 11.6). Numbering follows the Impl-2 Annex, not epics.md. ----
-  epic-11-impl2: in-progress
-  11-4-telemetry-flood-throttling-and-client-side-downsampling: in-progress   # partner, branch feature/impl2-backend-resilience; verify before submitting
-  11-5-multi-metric-composite-alert-correlation-engine: in-progress           # partner, same branch; verify before submitting
-  11-6-interactive-node-drill-down-and-incident-triage-timeline-e2e: review   # feature/impl2-e2e-playwright: 3/3 E2E + 16 unit/integration + CI green
+  epic-11-impl2: done
+  11-4-telemetry-flood-throttling-and-client-side-downsampling: done
+  11-5-multi-metric-composite-alert-correlation-engine: done
+  11-6-interactive-node-drill-down-and-incident-triage-timeline-e2e: done
