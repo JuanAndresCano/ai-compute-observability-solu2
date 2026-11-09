@@ -148,6 +148,7 @@ This log documents **7 significant AI interactions**, featuring **4 explicit hum
 | 12 | axe-core accessibility audit | Automated check caught an AI UI defect |
 | 13 | Hosted CI k6 failure | Human ran CI and pasted it; AI found the vacuous test and a silent-discard bug |
 | 14 | 11.4 test: hardcoded sleep + vacuous ≤ 10 assertion | AI audit; human approved the fix; mutation-checked |
+| 15 | `batch_id` message vs check; events bound 5,001 vs contract 5,000 | Human review (Cano) caught both; AI verified against the contract |
 
 ### Interaction 1 — Wrong PDF treated as the Impl-2 statement
 * **Prompt:** "Review the repo and the attached PDF with the context for Impl-2; implement Story 11.6 (pages 30–32)."
@@ -220,14 +221,20 @@ This log documents **7 significant AI interactions**, featuring **4 explicit hum
 * **Classification:** the "Blindly Green / vacuous assertion" trap in a test the AI had *accepted* from the partner's branch: the AI repeated the 14.2 ms figure in the merged walkthrough without having run k6. That unverified number has been withdrawn.
 
 ### Interaction 14 — Two testing mistakes corrected in the Story 11.4 test (Flaky Sleeper and vacuous assertion)
-* **Provenance (to confirm):** the test lives on the partner's branch (`b92578e`). Whether an AI wrote it is `TODO(partner): confirm`; this entry does not claim it. What is certain is that it was merged into `main` with both defects and passed CI.
+* **Provenance (confirmed by J. D. Quintero, relayed by J. A. Cano on 2026-11-09):** the test lives on the partner's branch (`b92578e`). It was written with AI assistance, directed by J. D. Quintero, who defined the scenario (5,000 events/s storm, 89 °C peak on `ws-gpu-15`) and steered the AI. No human correction happened before the merge: it went into `main` with both defects and passed CI.
 * **Detection:** found during an audit of the merged tree by the AI (Claude Code) while preparing the evidence for this log: (a) `await new Promise(r => setTimeout(r, 1100))`, a hardcoded sleep, which the rubric forbids; (b) the throttling assertion `frames.length ≤ 10` was satisfied by a single frame, because all 5,000 events were emitted in one synchronous burst, so the test proved peak preservation but not throttling (the "Blindly Green" trap).
 * **Human decision:** J. A. Cano reviewed the finding (matrix G-13) and instructed the correction on 2026-11-09.
 * **Correction (before → after):** the sleep was removed and the test now (1) sustains the storm (5,000-event burst, then 500 events after each received frame ≈ 5,000 ev/s), (2) ends when the frame timestamps span 1 s (data-driven; vitest's timeout is the only guard), (3) asserts at most 10 frames in every half-open 1 s window, at least 5 frames, more than 100 raw events per frame, the exact 89 °C peak on `ws-gpu-15` and no invented value above 74 °C elsewhere.
 * **Proof the new test can fail:** with the flush timer at 1 ms and an unthrottled downsampler it fails (`expected 695 to be less than or equal to 10`); reverted, it passes 3 / 3 (~1.1 s).
-* **Counts as two corrected testing mistakes** (a: timing hack; b: vacuous assertion) found in one test; the human-side confirmation of authorship by the partner is still open.
+* **Counts as two corrected testing mistakes** (a: timing hack; b: vacuous assertion) found in one test. Authorship is now confirmed (AI-assisted, human-directed by J. D. Quintero), but both defects were caught after the merge by the AI audit, not by a human review at the time.
+
+### Interaction 15 — Human review (J. A. Cano) catches a misleading validation message and a contract limit that the code had loosened
+* **Source:** feedback written by J. A. Cano (human lead) on 2026-11-09 while reviewing the integration; **not** a review by the partner, whose own review is still pending.
+* **Finding 1 (AI error, caught by the human):** the AI's `batch_id` validation (interaction 13) said "must be a 36-character UUID" but only checked `length === 36`. Its own test was equally weak: `'x'.repeat(36)` would have passed. **Correction:** a real UUID-shape regex (`8-4-4-4-12` hex), a truthful message, and test cases for 36-character non-UUIDs (`xxxxxxxx…`, underscores, a non-hex digit).
+* **Finding 2 (human observation, verified by the AI against the contract):** `events.length` was rejected only when `=== 5001` or `> 10000`, so 5,002 to 10,000 events were accepted although `contracts.md` Op1 P1 says `1 ≤ length ≤ 5,000`. The AI changed the bound to `> 5000` and one Impl-1 ATDD test failed: **`[C1-Q2d]` sent a 9,000-event filler batch, itself a contract violation.** The code had been loosened to let that test pass (the fixture drove the implementation, not the contract). **Correction:** strict contract in the service; the fixture now fills the queue with two 4,500-event batches (identical occupancy); regression tests for 0, 1, 5000, 5001, 5002, 9000, 10000 and 10001 events. The origin of the original loosening (Impl-1) is not recorded; `TODO(team)`: confirm who/what wrote it.
+* **Evidence:** 216 harness + 158 ATDD tests pass after the change; typecheck clean.
 
 ## Impl-2 governance summary (this branch)
-* Interactions logged: **14** (≥ 8 required for the whole team; partner entries still to be appended).
-* Human-steered decisions: 1, 2, 4, 5. AI-flagged / test-caught issues: 3, 6, 7, 8, 9, 10, 11, 12. Human-triggered: 13 (CI run pasted by the human), 14 (human approved the correction of A/B).
+* Interactions logged: **15** (≥ 8 required for the whole team; partner entries still to be appended).
+* Human-steered decisions: 1, 2, 4, 5. AI-flagged / test-caught issues: 3, 6, 7, 8, 9, 10, 11, 12. Human-triggered: 13 (CI run pasted by the human), 14 (human approved the correction of A/B), 15 (human review caught two defects).
 * **Open item `TODO(team)`:** record at least 2 genuine human corrections of AI-written tests (e.g. an over-mocked test or a rejected `sleep`) from the partner's Stories 11.4/11.5 or from review of this branch, with the exact before/after.

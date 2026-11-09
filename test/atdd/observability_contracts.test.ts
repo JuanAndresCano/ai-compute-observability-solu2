@@ -959,8 +959,11 @@ describe('Heartbeat semantics of ingestion (Op1 Q2b)', () => {
     for (let s = 1; s <= 8; s++) {
       w.clock.advanceBy(1000);
       const now = w.clock.nowMs();
-      const filler = Array.from({ length: 9000 }, () => w.sim.packet({ node_id: 'ws-gpu-10', timestamp_ms: now }));
-      await w.sut.ingest.ingestMetricBatch(w.sim.batch(filler.length, now, { events: filler }));
+      // 9,000 filler events in two batches of 4,500: a single 9,000-event batch violates Op1 P1 (1..5,000 per batch)
+      for (let part = 0; part < 2; part++) {
+        const filler = Array.from({ length: 4500 }, () => w.sim.packet({ node_id: 'ws-gpu-10', timestamp_ms: now }));
+        await w.sut.ingest.ingestMetricBatch(w.sim.batch(filler.length, now, { events: filler }));
+      }
       const head = [...allBut(w, ['ws-gpu-02', 'ws-gpu-10'], now), ...Array.from({ length: 970 }, () => w.sim.packet({ node_id: 'ws-gpu-10', timestamp_ms: now }))];
       const tail = Array.from({ length: 1000 }, () => w.sim.packet({ node_id: 'ws-gpu-02', timestamp_ms: now })); // dropped: only 1,000 slots are free
       const r = await w.sut.ingest.ingestMetricBatch(w.sim.batch(2000, now, { events: [...head, ...tail] }));

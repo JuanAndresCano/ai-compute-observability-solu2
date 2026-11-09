@@ -16,7 +16,7 @@ const batchWith = (w: ReturnType<typeof createWorld>, batch_id: string | undefin
 };
 
 describe('telemetry batch_id validation', () => {
-  it.each(['k6-12-3-1794239570940', 'short', '', '11111111-2222-4333-8444-5555555555555'])('rejects malformed batch_id %j with a 422 and stores nothing', async (id) => {
+  it.each(['k6-12-3-1794239570940', 'short', '', '11111111-2222-4333-8444-5555555555555', 'x'.repeat(36), '11111111_2222_4333_8444_555555555555', '1111111g-2222-4333-8444-555555555555'])('rejects malformed batch_id %j with a 422 and stores nothing', async (id) => {
     const w = createWorld();
     const err = await w.sut.ingest.ingestMetricBatch(batchWith(w, id)).catch((e: unknown) => e);
 
@@ -45,5 +45,23 @@ describe('telemetry batch_id validation', () => {
     const w = createWorld();
     const result = await w.sut.ingest.ingestMetricBatch(batchWith(w, undefined));
     expect(result.accepted_count).toBe(1);
+  });
+});
+
+describe('events array length bound (contracts.md Op1 P1: 1 <= length <= 5,000)', () => {
+  const batchOf = (w: ReturnType<typeof createWorld>, n: number) => w.sim.batch(n, T0, { events: w.sim.events(n, T0) });
+
+  it.each([5000, 1])('accepts a batch of exactly %i events', async (n) => {
+    const w = createWorld();
+    const result = await w.sut.ingest.ingestMetricBatch(batchOf(w, n));
+    expect(result.accepted_count).toBe(n);
+  });
+
+  it.each([0, 5001, 5002, 9000, 10_000, 10_001])('rejects a batch of %i events with 422 and stores nothing', async (n) => {
+    const w = createWorld();
+    const err = await w.sut.ingest.ingestMetricBatch(batchOf(w, n)).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ContractError);
+    expect((err as ContractError).body).toMatchObject({ error_code: 'ERR_INVALID_TELEMETRY_PAYLOAD', http_status: 422 });
+    expect(w.db.prepare('SELECT COUNT(*) AS n FROM ingested_batches').get()).toEqual({ n: 0 });
   });
 });

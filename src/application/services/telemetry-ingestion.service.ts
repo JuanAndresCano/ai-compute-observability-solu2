@@ -21,6 +21,8 @@ import { ContractError, StorageUnavailableError } from '../../shared/errors';
 import { FLEET_NODE_IDS, FLEET_SERIES_INFO } from '../../domain/models/fleet';
 
 const NODE_ID_REGEX = /^(ws-gpu-(0[1-9]|[12][0-9]|3[01])|server-gpu-01)$/;
+/** Any UUID shape (36 chars, matching the ingested_batches CHECK); stricter v4-only checking is reserved for inference request_id. */
+const BATCH_ID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const VALID_SUBJECTS = new Set<AcademicSubjectType>(['CS-101', 'CS-480', 'CS-530', 'FAC-RES', 'IDLE']);
 
@@ -73,14 +75,14 @@ export class TelemetryIngestionService implements TelemetryIngestionPort {
     // --------------------------------------------------------------------------
     // Precondition P1: Payload range and structural validation
     // --------------------------------------------------------------------------
-    if (!batch || !Array.isArray(batch.events) || batch.events.length < 1 || batch.events.length === 5001 || batch.events.length > 10000) {
+    if (!batch || !Array.isArray(batch.events) || batch.events.length < 1 || batch.events.length > 5000) {
       throw this.contractError('ERR_INVALID_TELEMETRY_PAYLOAD', 422, false, 'Invalid events array length (must be 1..5000)');
     }
 
     // The ingested_batches table enforces length(batch_id) = 36 and INSERT OR IGNORE would swallow a violation as a
     // "duplicate", silently discarding the events. Refuse a malformed id loudly instead.
-    if (batch.batch_id !== undefined && (typeof batch.batch_id !== 'string' || batch.batch_id.length !== 36)) {
-      throw this.contractError('ERR_INVALID_TELEMETRY_PAYLOAD', 422, false, 'batch_id must be a 36-character UUID');
+    if (batch.batch_id !== undefined && (typeof batch.batch_id !== 'string' || !BATCH_ID_REGEX.test(batch.batch_id))) {
+      throw this.contractError('ERR_INVALID_TELEMETRY_PAYLOAD', 422, false, 'batch_id must be a UUID (8-4-4-4-12 hexadecimal, 36 characters)');
     }
 
     for (let i = 0; i < batch.events.length; i++) {
