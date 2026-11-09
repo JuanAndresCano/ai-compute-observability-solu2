@@ -9,6 +9,7 @@ import type { System } from '../../composition';
 import type { AppConfig } from '../../config';
 import type { ErrorBodyDTO, MetricBatchDTO, NodeTelemetryPacketDTO } from '../../dto';
 import { ContractError } from '../../shared/errors';
+import { getHeatmapHtml } from './heatmap-ui';
 
 export interface HttpServerInstance {
   server: Server;
@@ -52,6 +53,19 @@ export function createHttpServer(system: System, config: AppConfig, startedAtMs:
     const method = req.method?.toUpperCase() || 'GET';
 
     try {
+      // --------------------------------------------------------------------------
+      // Web UI Dashboard (GET / & GET /observability/heatmap)
+      // --------------------------------------------------------------------------
+      if ((pathname === '/' || pathname === '/observability/heatmap') && (method === 'GET' || method === 'HEAD')) {
+        const html = getHeatmapHtml();
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Length': Buffer.byteLength(html),
+        });
+        if (method === 'HEAD') return res.end();
+        return res.end(html);
+      }
+
       // --------------------------------------------------------------------------
       // Probe: Health Check
       // --------------------------------------------------------------------------
