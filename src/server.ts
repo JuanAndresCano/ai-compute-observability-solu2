@@ -5,7 +5,7 @@
 import { loadConfig } from './config';
 import { initDatabase } from './adapters/db/database';
 import { createSystem, type Deps } from './composition';
-import { FakeClock } from './adapters/sim/fake-clock';
+import { SystemClock } from './adapters/system-clock';
 import { SequentialIdGenerator } from './adapters/sim/sequential-id-generator';
 import { SqliteTelemetryRepo } from './adapters/db/sqlite-telemetry-repo';
 import { SqliteAlertRepo } from './adapters/db/sqlite-alert-repo';
@@ -34,8 +34,29 @@ class ConsoleMetrics implements MetricsPort {
 }
 
 class ConsoleUiDispatch implements UiDispatchPort {
-  dispatch(_snapshot: FleetSnapshotDTO): void {
-    // UI dispatch pipeline
+  private wsHandler?: WebSocketStreamHandler;
+
+  setWsHandler(ws: WebSocketStreamHandler): void {
+    this.wsHandler = ws;
+  }
+
+  dispatch(snapshot: FleetSnapshotDTO): void {
+    if (!this.wsHandler) return;
+    for (const node of snapshot.nodes) {
+      for (const gpu of node.gpus) {
+        this.wsHandler.broadcastTelemetryEvent({
+          node_id: node.node_id,
+          gpu_index: gpu.gpu_index,
+          timestamp_ms: snapshot.timestamp_ms,
+          temperature_celsius: gpu.temperature_celsius,
+          vram_used_bytes: gpu.vram_used_bytes,
+          vram_total_bytes: gpu.vram_total_bytes,
+          gpu_utilization_pct: gpu.gpu_utilization_pct,
+          active_jobs_count: node.active_jobs_count,
+          current_subject: node.current_subject,
+        });
+      }
+    }
   }
 }
 
@@ -43,7 +64,7 @@ export async function bootstrap(): Promise<{ stop: () => Promise<void> }> {
   const config = loadConfig();
   const db = initDatabase({ dbPath: config.dbPath });
 
-  const clock = new FakeClock(Date.now());
+  const clock = new SystemClock();
   const ids = new SequentialIdGenerator();
   const events = new ConsoleEventDispatcher();
   const metrics = new ConsoleMetrics();
@@ -70,6 +91,7 @@ export async function bootstrap(): Promise<{ stop: () => Promise<void> }> {
 
   const downsampler = new StreamDownsampler({ maxOutputHz: 10 });
   const wsHandler = new WebSocketStreamHandler(httpServer.server, downsampler);
+  ui.setWsHandler(wsHandler);
   wsHandler.start();
 
   await httpServer.start();
