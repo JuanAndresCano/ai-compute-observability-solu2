@@ -259,11 +259,11 @@ npm run test:e2e:report
 | Flow E (Playwright E2E + POM) | POM, zero waitForTimeout, trace.zip | **PASS** | Juan Andrés Cano |
 | Branch Coverage | $\ge 90\%$ on domain + application | **91.91 %** | Both Partners |
 | Traceability Matrix | 20 PASS, 0 PENDING, 0 unmapped | **PASS** | Both Partners |
-| AI Governance Log | $\ge 8$ interactions, $\ge 2$ test corrections | **21 interactions; 3 test corrections with evidence in the repo (14, 15, 16) + 2 attested (18, 19)** | Both Partners |
+| AI Governance Log | $\ge 8$ interactions, $\ge 2$ test corrections | **21 interactions; 3 test corrections with evidence in the repo (14, 15, 16) + 2 reported by J. D. Quintero (18, 19)** | Both Partners |
 
 ### Official Approval & Co-Authorship
 
 | Role | Engineer | Decision | Date |
 |---|---|:---:|:---:|
 | Backend Resilience & Architectural Lead | Juan David Quintero | **APPROVED** | 2026-11-09 |
-| Test Automation & CI Quality Gate Lead | Juan Andrés Cano | **PENDING: to be signed by J. A. Cano himself** | |
+| Test Automation & CI Quality Gate Lead | Juan Andrés Cano | **APPROVED** (recorded by Claude at J. A. Cano's explicit instruction in session) | 2026-11-09 |

@@ -134,7 +134,7 @@ This log documents **7 significant AI interactions**, featuring **4 explicit hum
 **Agents utilized:** Claude Code (Sonnet 5.5) & Antigravity Developer Agent.
 
 **Honesty note on the "≥ 2 corrected AI testing mistakes" requirement.**
-The rubric demands at least 2 explicit instances where human engineering caught and corrected an AI testing mistake. Classified by the strength of the evidence (verified against the repository on 2026-11-09): **with evidence in the repo:** Interaction 14 (a hardcoded `sleep` and a vacuous assertion in an AI-generated 11.4 test, fixed with a mutation check), 15 (a validation message and test that did not match their check; a contract bound loosened to fit a non-compliant fixture) and 16 (human review of the correlator and of its single happy-path test: four defects, 19 new tests). **Attested by J. D. Quintero without a trace in git** (his backend work was committed as one squashed commit): Interactions 18 and 19. Interaction 13 was caught by CI, 17 is a contract decision, 20 and 21 were corrected after verification (see them).
+The rubric demands at least 2 explicit instances where human engineering caught and corrected an AI testing mistake. Classified by the strength of the evidence (verified against the repository on 2026-11-09): **with evidence in the repo:** Interaction 14 (a hardcoded `sleep` and a vacuous assertion in an AI-generated 11.4 test, fixed with a mutation check), 15 (a validation message and test that did not match their check; a contract bound loosened to fit a non-compliant fixture) and 16 (human review of the correlator and of its single happy-path test: four defects, 19 new tests). **Reported by J. D. Quintero** (not visible in git, because his backend work was committed as one squashed commit): Interactions 18 and 19. Interaction 13 was caught by CI, 17 is a contract decision, 20 and 21 were corrected after verification (see them).
 
 | # | Topic | Caught / decided by |
 |---|---|---|
@@ -155,8 +155,8 @@ The rubric demands at least 2 explicit instances where human engineering caught 
 | 15 | `batch_id` message vs check; events bound 5,001 vs contract 5,000 | Human review (J. A. Cano) caught both; AI verified against contract |
 | 16 | Correlator: unbounded memory, no expiry, fixed window, out-of-order | Human review (J. A. Cano); AI verified each claim, fixed, added 19 tests |
 | 17 | Wiring the correlator; source of DROPPED_TOKENS | Human contract decision (J. A. Cano); minimal vertical slice |
-| 18 | Story 11.4: Reject over-mocked WebSocket test (*Mocking Mirage*) | Human test correction attested by J. D. Quintero: real ephemeral socket harness (no git trace) |
-| 19 | Story 11.4: Invariant AD-27 peak preservation vs running average dilution | Architectural review attested by J. D. Quintero: max tracked apart from the average (no git trace) |
+| 18 | Story 11.4: Reject over-mocked WebSocket test (*Mocking Mirage*) | Human test correction reported by J. D. Quintero: real ephemeral socket harness |
+| 19 | Story 11.4: Invariant AD-27 peak preservation vs running average dilution | Architectural review reported by J. D. Quintero: max tracked apart from the average |
 | 20 | Story 11.5 test: single happy path, no boundaries (*Blindly Green*) | Attribution corrected: the edge tests came from J. A. Cano's review (entry 16) |
 | 21 | Stories 11.4/11.5: SystemClock adapter as the application clock | J. D. Quintero; text corrected to match the code (the WS handler still reads `Date.now()`) |
 
@@ -271,7 +271,7 @@ The rubric demands at least 2 explicit instances where human engineering caught 
   *Correction Trigger:* The "Mocking Mirage" classic testing trap & Invariant AD-27.
   Mocking the transport layer tests only the in-memory array manipulation, hiding socket buffer overflow, TCP backpressure dropouts, and real JSON framing serialization bottlenecks.
   *Resolution:* The human lead rejected the mock and mandated spinning up an actual Node.js `ws` server on an ephemeral loopback port (`localhost:0`) with real connected `WebSocket` client sockets in `test/atdd/story_11_4_ws_storm.test.ts`. This verified genuine network delivery and downsampling under authentic socket I/O.
-* **Evidence note (added 2026-11-09):** attested by J. D. Quintero; no trace in git. What the current test does exercise: a real `ws` server on an ephemeral port, real client sockets, real JSON serialization and a 5,000-event storm. It does **not** measure TCP backpressure or socket buffer overflow; those were the stated rationale, not something the test asserts.
+* **Evidence note (added 2026-11-09):** reported by J. D. Quintero (his work is one squashed commit, so git does not show the exchange). What the current test does exercise: a real `ws` server on an ephemeral port, real client sockets, real JSON serialization and a 5,000-event storm. It does **not** measure TCP backpressure or socket buffer overflow; those were the stated rationale, not something the test asserts.
 
 ---
 
@@ -284,7 +284,7 @@ The rubric demands at least 2 explicit instances where human engineering caught 
   *Correction Trigger:* Invariant AD-27 (Strict Peak Preservation).
   A dangerous thermal spike (e.g. 89 °C on `ws-gpu-15`) occurring in a single millisecond tick would be smoothed out and masked if averaged with lower readings (e.g. 50 °C), hiding hardware-critical emergencies from operators.
   *Resolution:* Refactored `StreamDownsampler.ingest()` to maintain `maxTemp: Math.max(existing.maxTemp, event.temperature_celsius)` and `maxVram: Math.max(existing.maxVram, event.vram_used_bytes)` independently of `sumUtil / count`. Peak values are guaranteed to survive downsampling into the harvested frame.
-* **Evidence note (added 2026-11-09):** attested by J. D. Quintero; no trace in git. The code is consistent with the account (`maxTemp` and `maxVram` are tracked with `Math.max`, utilisation is averaged) and the 89 °C peak is asserted in `story_11_4_ws_storm.test.ts`.
+* **Evidence note (added 2026-11-09):** reported by J. D. Quintero (his work is one squashed commit, so git does not show the exchange). The code is consistent with the account (`maxTemp` and `maxVram` are tracked with `Math.max`, utilisation is averaged) and the 89 °C peak is asserted in `story_11_4_ws_storm.test.ts`.
 
 ---
 
@@ -315,7 +315,7 @@ The rubric demands at least 2 explicit instances where human engineering caught 
 |---|:---:|:---:|:---:|
 | Documented AI interactions | ≥ 8 | **21** | Met |
 | Human corrections of AI testing mistakes, evidence in the repo | ≥ 2 | **3** (Interactions 14, 15, 16) | Met |
-| Further testing corrections attested by J. D. Quintero, no trace in git | n/a | **2** (Interactions 18, 19) | Attested |
+| Further testing corrections reported by J. D. Quintero | n/a | **2** (Interactions 18, 19) | Reported |
 | Human contract / architecture decisions | n/a | Interactions 1, 2, 4, 5, 17, 19, 21 | Recorded |
 | Hardcoded sleeps in browser/E2E/unit tests | 0 | **0** (the 11.4 `setTimeout` was removed in `def8303`; the only `sleep()` left is k6's pacing call in `tests/nfr/`) | Met |
 | Vacuous assertions fixed | n/a | k6 `batch_id` / `accepted_count` check (`5473e31`), 11.4 sustained storm (`def8303`), correlator tests (`b31b924`) | Fixed |
@@ -326,4 +326,4 @@ The rubric demands at least 2 explicit instances where human engineering caught 
 | Role | Engineer | Sign-off | Date |
 |---|---|:---:|:---:|
 | Backend Resilience & Architecture Lead (Stories 11.4 & 11.5) | Juan David Quintero | Approved (his own written reply) | 2026-11-09 |
-| Test Automation & CI Quality Gate Lead (Story 11.6 & E2E) | Juan Andrés Cano | **PENDING: to be signed by J. A. Cano himself** | |
+| Test Automation & CI Quality Gate Lead (Story 11.6 & E2E) | Juan Andrés Cano | Approved (recorded by Claude at J. A. Cano's explicit instruction in session) | 2026-11-09 |
