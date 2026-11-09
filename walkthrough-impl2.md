@@ -188,7 +188,7 @@ Running 3 tests using 1 worker
   3 passed (5.4s)
 ```
 
-Full gate (`npm run ci`): typecheck OK · harness 5 files / 145 tests · ATDD 157 tests (**302 / 302**) · `trace:check` OK · `readiness:check` OK.
+Full gate at the time Story 11.6 was first committed (`npm run ci`): typecheck OK · harness 5 files / 145 tests · ATDD 157 tests (302 / 302) · `trace:check` OK · `readiness:check` OK. **Current totals are in §6** (418 Vitest + 5 Playwright).
 
 **Not a "blindly green" suite — deliberate break.** To prove the spec can fail, the view threshold was temporarily changed from 88 to 95 (`THERMAL_ALERT_C`) and the suite run with `CI=1` (retries=1). Result (then reverted with `git checkout`):
 
@@ -211,19 +211,20 @@ Full gate (`npm run ci`): typecheck OK · harness 5 files / 145 tests · ATDD 15
   (plus `test-failed-1.png` and `video.webm`).
 - A full-pass run with `npx playwright test --trace=on` produced one `trace.zip` for each of the 3 tests.
 - Open with `npx playwright show-trace <path>/trace.zip` to see DOM snapshots, the drawer slide-out and the cordon button click.
-- **TODO(team):** CI does not exist in this repo (no `.github/`). To meet "trace.zip captured on CI", copy `test/ci/quality-gate.yml` to `.github/workflows/`, add `npx playwright test` and upload `test-results/` as an artifact on failure.
+- **CI:** `.github/workflows/ci.yml` runs the suite on every push to `main` and uploads `test-results/` (traces, only present when a test needed a retry) and `playwright-report/` as artifacts; see §7b. Latest hosted run: [42654308692](https://github.com/JuanAndresCano/ai-compute-observability-solu2/actions/runs/42654308692), 3 / 3 jobs green.
 
 
 ## 6. Multi-layer test execution summary
 
-Verified on `main` after merging `feature/impl2-e2e-playwright` and `feature/impl2-backend-resilience` (`npm run ci` + `npm run test:e2e`):
+Verified on `main` at commit `61a8eb1` (`npm run ci:full`, also green on hosted CI, run 42654308692):
 
 ```text
-Vitest harness config : 8 files, 198 tests   (fixtures 36, schema 35, scaffold 8, cordon 16, purity 52, integration/story_11_5 1,
-                                              domain-branches 40, service-branches 10)
-Vitest ATDD config    : 2 files, 158 tests   (157 contracts + story_11_4_ws_storm 1)
-Playwright (Flow E)   : 1 spec,   3 tests    (3 passed, 5.4 s)
-Branch coverage       : 90.47 % (399/441) on src/domain + src/application, enforced by `npm run test:coverage`
+Vitest harness config : 11 files, 260 tests  (fixtures, schema, scaffold, purity, cordon 16, domain-branches 40, service-branches 10,
+                                              ingestion batch_id/limits, incidents 21 through real HTTP, integration/story_11_5 x2: 1 + 19)
+Vitest ATDD config    : 2 files,  158 tests  (157 contracts + story_11_4_ws_storm 1)
+Vitest total          : 418 tests
+Playwright (Flow E)   : 2 specs,  5 tests    (3 triage + 2 accessibility/axe; 5 passed, ~6.6 s on hosted CI)
+Branch coverage       : 91.91 % on src/domain + src/application, enforced (>= 90) by `npm run test:coverage`
 typecheck / trace:check / readiness:check : OK
 ```
 
@@ -233,7 +234,7 @@ Merge notes: (1) the partner's `ConsoleUiDispatch.dispatch` iterated `snapshot.n
 
 ## 7. Traceability
 
-See [`traceability-matrix.md`](traceability-matrix.md): 25 requirements, 0 unmapped, 17 PASS / 8 PENDING at the time of this commit. Close the PENDING rows only with real evidence (section 6 of the matrix lists the commands).
+See [`traceability-matrix.md`](traceability-matrix.md): 26 requirements, 0 unmapped, 20 PASS, 0 PENDING, 6 DEFERRED (out of the Impl-2 Annex scope, each with its rationale and cost to close). Latest hosted CI run 42654308692 is green.
 
 ## 7b. Quality gate and CI
 
