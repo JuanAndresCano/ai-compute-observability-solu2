@@ -11,6 +11,9 @@ import type { JobRegistryPort } from './ports/out/job-registry.port';
 import type { ForensicsRepositoryPort } from './ports/out/forensics-repository.port';
 import type { ForensicsPort } from './ports/in/forensics.port';
 import type { MonitoringPort } from './ports/in/monitoring.port';
+import type { CordonPort } from './ports/in/cordon.port';
+import type { AuditTrailPort } from './ports/out/audit-trail.port';
+import { NodeCordonService } from './application/services/node-cordon.service';
 import { TelemetryRingBuffer } from './domain/models/telemetry-ring-buffer';
 import { FLEET_SERIES_IDS } from './domain/models/fleet';
 import type { TelemetryIngestionPort } from './ports/in/telemetry-ingestion.port';
@@ -35,6 +38,8 @@ export interface Deps {
   logs: NodeLogPort;
   jobs: JobRegistryPort;
   forensics: ForensicsRepositoryPort;
+  /** Optional read side of the audit events (activity feed). */
+  auditTrail?: AuditTrailPort;
 }
 
 export interface System {
@@ -44,6 +49,9 @@ export interface System {
   windows: SlidingWindowAssembler;
   forensics: ForensicsPort;
   monitor: MonitoringPort;
+  cordon: CordonPort;
+  auditTrail: AuditTrailPort;
+  logs: NodeLogPort;
   /** The process-wide ring buffer (AD-02); built on first access. */
   readonly ring: TelemetryRingBuffer;
   getActiveAlerts?(): Promise<any[]>;
@@ -64,6 +72,9 @@ export function createSystem(deps: Deps): System {
     windows,
     forensics: new ForensicsService(deps, watchdog),
     monitor,
+    cordon: new NodeCordonService(deps.clock, deps.events),
+    auditTrail: deps.auditTrail ?? { recent: () => [] },
+    logs: deps.logs,
     ring,
     getActiveAlerts: () => (deps.alerts.getActiveAlerts ? deps.alerts.getActiveAlerts() : Promise.resolve([])),
   };

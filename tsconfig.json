@@ -12,5 +12,5 @@
     "noEmit": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "planning/detailed-design/schemas/dto.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "tests/**/*.ts", "playwright.config.ts", "planning/detailed-design/schemas/dto.ts"]
 }

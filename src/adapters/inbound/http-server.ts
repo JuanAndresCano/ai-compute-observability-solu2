@@ -9,6 +9,7 @@ import type { System } from '../../composition';
 import type { AppConfig } from '../../config';
 import type { ErrorBodyDTO, MetricBatchDTO, NodeTelemetryPacketDTO } from '../../dto';
 import { ContractError } from '../../shared/errors';
+import { handleObservabilityRoute } from './observability-ui';
 
 export interface HttpServerInstance {
   server: Server;
@@ -52,6 +53,9 @@ export function createHttpServer(system: System, config: AppConfig, startedAtMs:
     const method = req.method?.toUpperCase() || 'GET';
 
     try {
+      // Observability Console web view + triage endpoints (Story 11.6)
+      if (await handleObservabilityRoute(system, req, res, url)) return;
+
       // --------------------------------------------------------------------------
       // Probe: Health Check
       // --------------------------------------------------------------------------

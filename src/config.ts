@@ -11,6 +11,8 @@ export interface AppConfig {
   readonly maxRawQueueCapacity: number;
   readonly decimationWindowMs: number;
   readonly logLevel: 'debug' | 'info' | 'warn' | 'error';
+  /** Demo/E2E only: pre-load scripted kernel log lines for ws-gpu-22 so the triage drawer has evidence to show. */
+  readonly seedDemoLogs?: boolean;
 }
 
 function parsePort(val: string | undefined, defaultPort = 8080): number {
@@ -46,5 +48,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     maxRawQueueCapacity: Number.parseInt(env.MAX_RAW_QUEUE_CAPACITY || '10000', 10),
     decimationWindowMs: Number.parseInt(env.DECIMATION_WINDOW_MS || '250', 10),
     logLevel: parseLogLevel(env.LOG_LEVEL),
+    seedDemoLogs: env.SEED_DEMO_LOGS === 'true',
   };
 }

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fleet Thermal Heatmap</title>
+  <link rel="stylesheet" href="/observability/assets/heatmap.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Fleet Thermal Heatmap</h1>
+      <p class="sub">AI Infrastructure Observability Console · 31 workstations + server-gpu-01</p>
+    </div>
+    <div class="summary" aria-live="polite">
+      <span data-testid="alert-count" id="alert-count">0 thermal alerts</span>
+      <span data-testid="cordoned-count" id="cordoned-count">0 cordoned</span>
+    </div>
+  </header>
+
+  <div id="connection-banner" class="banner" role="alert" hidden>Connection to the console lost. Retrying…</div>
+
+  <div class="layout">
+    <main>
+      <ul class="legend" aria-label="Legend">
+        <li><span class="swatch s-normal"></span>Normal</li>
+        <li><span class="swatch s-warm"></span>Warm (≥ 75°C)</li>
+        <li><span class="swatch s-alert"></span>Thermal alert (&gt; 88°C)</li>
+        <li><span class="swatch s-cordoned"></span>Cordoned</li>
+        <li><span class="swatch s-nodata"></span>No data</li>
+      </ul>
+      <section id="fleet-grid" class="grid" data-testid="fleet-grid" aria-label="Fleet thermal heatmap">
+        <p class="loading" id="grid-loading">Loading fleet…</p>
+      </section>
+    </main>
+
+    <aside class="feed" aria-labelledby="feed-title">
+      <h2 id="feed-title">Activity feed</h2>
+      <ul id="activity-feed" data-testid="activity-feed" aria-live="polite">
+        <li class="empty" id="feed-empty">No operator actions yet.</li>
+      </ul>
+    </aside>
+  </div>
+
+  <aside id="node-drawer" class="drawer" data-testid="node-drawer" role="dialog" aria-modal="false"
+         aria-labelledby="drawer-title" aria-hidden="true" inert>
+    <div class="drawer-head">
+      <div>
+        <h2 id="drawer-title"><span class="muted">Node</span> <span id="drawer-node-id" data-testid="drawer-node-id"></span></h2>
+        <p id="drawer-status" class="status-pill" data-testid="drawer-status"></p>
+      </div>
+      <button type="button" id="drawer-close" class="icon-btn" data-testid="drawer-close" aria-label="Close drawer (Esc)">×</button>
+    </div>
+
+    <dl class="metrics">
+      <div><dt>Temperature</dt><dd id="drawer-temperature" data-testid="drawer-temperature">—</dd></div>
+      <div><dt>GPU utilization</dt><dd id="drawer-utilization" data-testid="drawer-utilization">—</dd></div>
+      <div><dt>VRAM</dt><dd id="drawer-vram" data-testid="drawer-vram">—</dd></div>
+    </dl>
+
+    <h3>Temperature (live)</h3>
+    <svg id="telemetry-chart" data-testid="telemetry-chart" data-points="0" viewBox="0 0 320 110"
+         role="img" aria-label="Temperature history" preserveAspectRatio="none"></svg>
+
+    <h3>Recent error logs</h3>
+    <pre id="drawer-logs" class="logs" data-testid="drawer-logs" tabindex="0">Loading…</pre>
+
+    <p id="drawer-error" class="error" role="alert" hidden></p>
+    <button type="button" id="cordon-button" class="danger" data-testid="cordon-button">Cordon Node from Cluster</button>
+  </aside>
+
+  <script src="/observability/assets/heatmap.js" defer></script>
+</body>
+</html>

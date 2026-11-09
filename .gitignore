@@ -7,3 +7,7 @@ coverage/
 # Local-only BMAD tooling (skills + config): ~12 MB, not part of the deliverable
 .claude/
 _bmad/
+
+# Playwright artifacts (trace.zip, screenshots, videos, HTML report)
+test-results/
+playwright-report/

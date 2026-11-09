@@ -13,17 +13,11 @@ import { SqliteRollupRepo } from './adapters/db/sqlite-rollup-repo';
 import { SqliteForensicsRepo } from './adapters/db/sqlite-forensics-repo';
 import { SimNodeLog } from './adapters/sim/sim-node-log';
 import { SimJobRegistry } from './adapters/sim/sim-job-registry';
+import { InMemoryAuditTrail } from './adapters/memory/in-memory-audit-trail';
 import { createHttpServer } from './adapters/inbound/http-server';
-import type { EventDispatcherPort, AuditEvent } from './ports/out/event-dispatcher.port';
 import type { MetricsPort } from './ports/out/metrics.port';
 import type { UiDispatchPort } from './ports/out/ui-dispatch.port';
 import type { FleetSnapshotDTO } from './dto';
-
-class ConsoleEventDispatcher implements EventDispatcherPort {
-  emit(_event: AuditEvent): void {
-    // Audit event logging
-  }
-}
 
 class ConsoleMetrics implements MetricsPort {
   increment(_name: string, _labels: Readonly<Record<string, string>>, _by: number): void {
@@ -43,17 +37,27 @@ export async function bootstrap(): Promise<{ stop: () => Promise<void> }> {
 
   const clock = new FakeClock(Date.now());
   const ids = new SequentialIdGenerator();
-  const events = new ConsoleEventDispatcher();
+  const auditTrail = new InMemoryAuditTrail();
   const metrics = new ConsoleMetrics();
   const ui = new ConsoleUiDispatch();
   const logs = new SimNodeLog();
   const jobs = new SimJobRegistry();
+  if (config.seedDemoLogs) {
+    for (const line of [
+      '[19:13:52.401] kernel: nvidia: GPU 0000:01:00.0 temperature 91C exceeds threshold (88C)',
+      '[19:13:58.120] kernel: NVRM: GPU at PCI:0000:01:00.0 thermal throttling engaged',
+      '[19:14:01.890] vllm-worker: CUDA warning: clocks reduced due to thermal slowdown',
+    ]) {
+      logs.emit('ws-gpu-22', line);
+    }
+  }
 
   const deps: Deps = {
     clock,
     ids,
     metrics,
-    events,
+    events: auditTrail,
+    auditTrail,
     telemetry: new SqliteTelemetryRepo(db),
     alerts: new SqliteAlertRepo(db),
     rollups: new SqliteRollupRepo(db),
