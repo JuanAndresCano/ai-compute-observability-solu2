@@ -149,6 +149,7 @@ This log documents **7 significant AI interactions**, featuring **4 explicit hum
 | 13 | Hosted CI k6 failure | Human ran CI and pasted it; AI found the vacuous test and a silent-discard bug |
 | 14 | 11.4 test: hardcoded sleep + vacuous ≤ 10 assertion | AI audit; human approved the fix; mutation-checked |
 | 15 | `batch_id` message vs check; events bound 5,001 vs contract 5,000 | Human review (Cano) caught both; AI verified against the contract |
+| 16 | Correlator: unbounded memory, no expiry, fixed window, out-of-order | Human review (Cano); AI verified each claim, fixed, added 19 tests |
 
 ### Interaction 1 — Wrong PDF treated as the Impl-2 statement
 * **Prompt:** "Review the repo and the attached PDF with the context for Impl-2; implement Story 11.6 (pages 30–32)."
@@ -234,7 +235,17 @@ This log documents **7 significant AI interactions**, featuring **4 explicit hum
 * **Finding 2 (human observation, verified by the AI against the contract):** `events.length` was rejected only when `=== 5001` or `> 10000`, so 5,002 to 10,000 events were accepted although `contracts.md` Op1 P1 says `1 ≤ length ≤ 5,000`. The AI changed the bound to `> 5000` and one Impl-1 ATDD test failed: **`[C1-Q2d]` sent a 9,000-event filler batch, itself a contract violation.** The code had been loosened to let that test pass (the fixture drove the implementation, not the contract). **Correction:** strict contract in the service; the fixture now fills the queue with two 4,500-event batches (identical occupancy); regression tests for 0, 1, 5000, 5001, 5002, 9000, 10000 and 10001 events. The origin of the original loosening (Impl-1) is not recorded; `TODO(team)`: confirm who/what wrote it.
 * **Evidence:** 216 harness + 158 ATDD tests pass after the change; typecheck clean.
 
+### Interaction 16 — Human code review of the correlator finds four defects and one untested semantic
+* **Source:** J. A. Cano's review of `CompositeIncidentCorrelator` (read from the code, 2026-11-09). The AI verified each claim against the source before acting; all four were true.
+* **Defects (before → after):**
+  1. *Memory growth under a storm:* `supporting_evidence` grew without bound while duplicates were suppressed → capped at 100 events; `suppressed_count` still counts every duplicate; `prune(now)` releases expired state.
+  2. *Incident never expired:* `activeIncidents` was only cleared by `clear()`, and `getActiveIncident` returned stale incidents → incidents expire after one window of silence; `getActiveIncident(id, nowMs)` and `listActiveIncidents(nowMs)` respect it.
+  3. *Fixed window anchored at creation:* a sustained failure would have opened a new incident every 30 s → the window now slides with the last related anomaly (one incident for a sustained failure). **Interpretation, not confirmed by the Annex:** AD-28 says only "within a 30-second window"; the BDD says "15-second window". Both are supported (`windowDurationSeconds`); default 30. `TODO(team)`: confirm.
+  4. *Out-of-order timestamps:* an old event produced a negative age and bypassed the window filter (and was counted as a duplicate of a live incident) → per-node high-water mark; events older than a window behind the newest are ignored; late events inside the window are accepted.
+* **Test weakness (also from the review):** the only test was a single happy path. 19 tests added in `story_11_5_correlator_hardening.test.ts` (4 simultaneous events at one millisecond as in the Annex BDD, 15 s window, memory cap under 10,000 duplicates, expiry boundary at exactly 30,000 ms, sustained failure, out-of-order, strict `> 85.0`, fan > 0, zero dropped tokens, node isolation, `LATENCY_BREACH` ignored). Run against the previous implementation, 6 of them fail (some because the new API did not exist, the rest on behaviour: expiry, out-of-order, stale events).
+* **Classification:** human review of an AI-generated service and its test; four real defects fixed.
+
 ## Impl-2 governance summary (this branch)
-* Interactions logged: **15** (≥ 8 required for the whole team; partner entries still to be appended).
-* Human-steered decisions: 1, 2, 4, 5. AI-flagged / test-caught issues: 3, 6, 7, 8, 9, 10, 11, 12. Human-triggered: 13 (CI run pasted by the human), 14 (human approved the correction of A/B), 15 (human review caught two defects).
+* Interactions logged: **16** (≥ 8 required for the whole team; partner entries still to be appended).
+* Human-steered decisions: 1, 2, 4, 5. AI-flagged / test-caught issues: 3, 6, 7, 8, 9, 10, 11, 12. Human-triggered: 13 (CI run pasted by the human), 14 (human approved the correction of A/B), 15 and 16 (human code review).
 * **Open item `TODO(team)`:** record at least 2 genuine human corrections of AI-written tests (e.g. an over-mocked test or a rejected `sleep`) from the partner's Stories 11.4/11.5 or from review of this branch, with the exact before/after.
