@@ -134,7 +134,7 @@ This log documents **7 significant AI interactions**, featuring **4 explicit hum
 **Agents utilized:** Claude Code (Sonnet 5.5) & Antigravity Developer Agent.
 
 **Honesty note on the "≥ 2 corrected AI testing mistakes" requirement.**
-The rubric demands at least 2 explicit instances where human engineering caught and corrected an AI testing mistake (e.g. rejecting a `sleep()` timeout, catching an over-mocked test, or eliminating blindly green / vacuous assertions). This log documents **4 distinct testing corrections** (Interactions 13, 14, 15, and 17) distributed across both engineering halves.
+The rubric demands at least 2 explicit instances where human engineering caught and corrected an AI testing mistake. Classified by the strength of the evidence (verified against the repository on 2026-11-09): **with evidence in the repo:** Interaction 14 (a hardcoded `sleep` and a vacuous assertion in an AI-generated 11.4 test, fixed with a mutation check), 15 (a validation message and test that did not match their check; a contract bound loosened to fit a non-compliant fixture) and 16 (human review of the correlator and of its single happy-path test: four defects, 19 new tests). **Attested by J. D. Quintero without a trace in git** (his backend work was committed as one squashed commit): Interactions 18 and 19. Interaction 13 was caught by CI, 17 is a contract decision, 20 and 21 were corrected after verification (see them).
 
 | # | Topic | Caught / decided by |
 |---|---|---|
@@ -155,10 +155,10 @@ The rubric demands at least 2 explicit instances where human engineering caught 
 | 15 | `batch_id` message vs check; events bound 5,001 vs contract 5,000 | Human review (J. A. Cano) caught both; AI verified against contract |
 | 16 | Correlator: unbounded memory, no expiry, fixed window, out-of-order | Human review (J. A. Cano); AI verified each claim, fixed, added 19 tests |
 | 17 | Wiring the correlator; source of DROPPED_TOKENS | Human contract decision (J. A. Cano); minimal vertical slice |
-| 18 | Story 11.4: Reject over-mocked WebSocket test (*Mocking Mirage*) | Human test correction (J. D. Quintero): enforced real ephemeral socket harness |
-| 19 | Story 11.4: Invariant AD-27 peak preservation vs running average dilution | Human architectural review (J. D. Quintero): separated maxTemp/maxVram from sum |
-| 20 | Story 11.5 test: rejection of zero-boundary anomaly tests (*Blindly Green*) | Human test correction (J. D. Quintero): forced strict 30s window and edge values |
-| 21 | Stories 11.4/11.5: Hexagonal purity & ClockPort adapter injection | Human architectural review (J. D. Quintero): wired SystemClock, banned `Date.now()` |
+| 18 | Story 11.4: Reject over-mocked WebSocket test (*Mocking Mirage*) | Human test correction attested by J. D. Quintero: real ephemeral socket harness (no git trace) |
+| 19 | Story 11.4: Invariant AD-27 peak preservation vs running average dilution | Architectural review attested by J. D. Quintero: max tracked apart from the average (no git trace) |
+| 20 | Story 11.5 test: single happy path, no boundaries (*Blindly Green*) | Attribution corrected: the edge tests came from J. A. Cano's review (entry 16) |
+| 21 | Stories 11.4/11.5: SystemClock adapter as the application clock | J. D. Quintero; text corrected to match the code (the WS handler still reads `Date.now()`) |
 
 ### Interaction 1 — Wrong PDF treated as the Impl-2 statement
 * **Prompt:** "Review the repo and the attached PDF with the context for Impl-2; implement Story 11.6 (pages 30–32)."
@@ -271,6 +271,7 @@ The rubric demands at least 2 explicit instances where human engineering caught 
   *Correction Trigger:* The "Mocking Mirage" classic testing trap & Invariant AD-27.
   Mocking the transport layer tests only the in-memory array manipulation, hiding socket buffer overflow, TCP backpressure dropouts, and real JSON framing serialization bottlenecks.
   *Resolution:* The human lead rejected the mock and mandated spinning up an actual Node.js `ws` server on an ephemeral loopback port (`localhost:0`) with real connected `WebSocket` client sockets in `test/atdd/story_11_4_ws_storm.test.ts`. This verified genuine network delivery and downsampling under authentic socket I/O.
+* **Evidence note (added 2026-11-09):** attested by J. D. Quintero; no trace in git. What the current test does exercise: a real `ws` server on an ephemeral port, real client sockets, real JSON serialization and a 5,000-event storm. It does **not** measure TCP backpressure or socket buffer overflow; those were the stated rationale, not something the test asserts.
 
 ---
 
@@ -283,22 +284,15 @@ The rubric demands at least 2 explicit instances where human engineering caught 
   *Correction Trigger:* Invariant AD-27 (Strict Peak Preservation).
   A dangerous thermal spike (e.g. 89 °C on `ws-gpu-15`) occurring in a single millisecond tick would be smoothed out and masked if averaged with lower readings (e.g. 50 °C), hiding hardware-critical emergencies from operators.
   *Resolution:* Refactored `StreamDownsampler.ingest()` to maintain `maxTemp: Math.max(existing.maxTemp, event.temperature_celsius)` and `maxVram: Math.max(existing.maxVram, event.vram_used_bytes)` independently of `sumUtil / count`. Peak values are guaranteed to survive downsampling into the harvested frame.
+* **Evidence note (added 2026-11-09):** attested by J. D. Quintero; no trace in git. The code is consistent with the account (`maxTemp` and `maxVram` are tracked with `Math.max`, utilisation is averaged) and the 89 °C peak is asserted in `story_11_4_ws_storm.test.ts`.
 
 ---
 
-### Interaction 20 — Rejecting zero-boundary composite alert tests (The Blindly Green Trap)
-* **Context / Prompt:**
-  *"Write the integration test suite for Story 11.5 (`CompositeIncidentCorrelator`) to verify CRITICAL_COOLING_FAILURE detection."*
-* **AI Proposal:**
-  The agent generated a single test feeding all 3 anomalies (`THERMAL_SPIKE`, `FAN_FAILURE`, `DROPPED_TOKENS`) with the exact same millisecond timestamp (`now`), asserting that `incident !== null`.
-* **Human Engineering Review & Correction (Critical Test Correction #4 — J. D. Quintero):**
-  *Correction Trigger:* The "Blindly Green" testing trap & Invariant AD-28 boundary condition.
-  The AI test verified only an idealized zero-delay scenario. It failed to verify:
-  1. Window expiration: events separated by > 30 seconds must NOT correlate.
-  2. Strict thresholds: temperature of exactly 85.0 °C must NOT trigger (contract requires $> 85.0^\circ\text{C}$).
-  3. Fan speed of 1 RPM must NOT trigger (contract requires $== 0\text{ RPM}$).
-  4. Duplicate suppression: subsequent anomaly arrivals within the active 30 s incident window must be deduplicated and increment `suppressed_count` without emitting new alerts.
-  *Resolution:* Instructed the agent to expand `test/integration/story_11_5_composite_alerts.test.ts` to test all boundary edge cases: strict inequality thresholds, out-of-window expiration, and deduplication of subsequent alerts.
+### Interaction 20 — The Story 11.5 test was a single happy path (attribution corrected)
+* **Correction note (2026-11-09):** an earlier version of this entry, written by J. D. Quintero, said the AI's test used one identical millisecond timestamp and that the human then had `story_11_5_composite_alerts.test.ts` expanded with boundary cases. Checked against the repository, that does not match: the file is unchanged since its original commit (`b92578e`), its events are staggered (+1 s, +5 s, +10 s, +14 s) and it already covers duplicate suppression (`suppressed_count` 1). The entry is rewritten to what the repository shows.
+* **What the original AI-generated test (directed by J. D. Quintero) covered:** one happy path: three signals, then a fourth event suppressed. **What it did not cover:** window expiry, the strict `> 85.0` boundary (85.0 must not fire), fan at 1 RPM, zero dropped tokens, node isolation, out-of-order events, the memory bound.
+* **Who found it and when:** J. A. Cano's review of the correlator (Interaction 16). The missing cases were then written by the AI: 19 tests in `story_11_5_correlator_hardening.test.ts` and boundary cases in `test/harness/domain-branches.test.ts` (coverage work), including the Annex scenario of 4 simultaneous anomalies. J. D. Quintero reviewed and accepted them on 2026-11-09.
+* **Classification:** a real "Blindly Green" weakness, corrected by human review (J. A. Cano), not by J. D. Quintero's original instruction.
 
 ---
 
@@ -310,7 +304,8 @@ The rubric demands at least 2 explicit instances where human engineering caught 
 * **Human Architectural Review & Correction (J. D. Quintero):**
   *Correction Trigger:* Architectural Rule R4 & Hexagonal Pure Domain Mandate.
   Directly calling system time primitives inside domain/application pipelines breaks determinism and prevents repeatable test execution.
-  *Resolution:* Created `src/adapters/system-clock.ts` implementing `ClockPort` for production runtime, injected it cleanly into `WebSocketStreamHandler`, and preserved `FakeClock` compatibility for all automated test runs.
+  *Resolution:* Created `src/adapters/system-clock.ts` implementing `ClockPort` and used it as the application clock in `src/server.ts`, replacing a `FakeClock(Date.now())` that never advanced in production; `FakeClock` remains the clock of every automated test.
+* **Correction note (2026-11-09):** an earlier version said the clock was also injected into `WebSocketStreamHandler` and that `Date.now()` was banned. The code shows otherwise: `src/adapters/inbound/websocket-server.ts:70` still calls `Date.now()` in `flushPendingFrame`. The purity tests only scan `domain/`, `application/` and `ports/`, so an inbound adapter reading the wall clock is allowed, but the 10 Hz tick is not clock-injected. Optional improvement: inject a `ClockPort` into the handler.
 
 ---
 
@@ -318,17 +313,17 @@ The rubric demands at least 2 explicit instances where human engineering caught 
 
 | Metric | Target (Rubric) | Achieved | Status |
 |---|:---:|:---:|:---:|
-| Documented AI Interactions | $\ge 8$ | **21** | **EXCEEDED (162%)** |
-| Critical Human Testing Mistakes Corrected | $\ge 2$ | **4** (Interactions 13, 14, 18, 20) | **EXCEEDED (100%)** |
-| Human Architectural & Contract Decisions | - | **8** (Interactions 1, 2, 4, 5, 15, 16, 17, 19, 21) | **VERIFIED** |
-| Flaky Sleeps Eliminated | 0 | **0** (eliminated `setTimeout` in 11.4) | **VERIFIED** |
-| Vacuous Assertions Fixed | 0 | **0** (fixed k6 UUID check and 11.4 sustained storm) | **VERIFIED** |
-| Branch Coverage on Core Domain | $\ge 90\%$ | **91.9%** | **PASSED** |
+| Documented AI interactions | ≥ 8 | **21** | Met |
+| Human corrections of AI testing mistakes, evidence in the repo | ≥ 2 | **3** (Interactions 14, 15, 16) | Met |
+| Further testing corrections attested by J. D. Quintero, no trace in git | n/a | **2** (Interactions 18, 19) | Attested |
+| Human contract / architecture decisions | n/a | Interactions 1, 2, 4, 5, 17, 19, 21 | Recorded |
+| Hardcoded sleeps in browser/E2E/unit tests | 0 | **0** (the 11.4 `setTimeout` was removed in `def8303`; the only `sleep()` left is k6's pacing call in `tests/nfr/`) | Met |
+| Vacuous assertions fixed | n/a | k6 `batch_id` / `accepted_count` check (`5473e31`), 11.4 sustained storm (`def8303`), correlator tests (`b31b924`) | Fixed |
+| Branch coverage, domain + application | ≥ 90 % | **91.9 %** | Met |
 
-### Co-Authorship & Dual Sign-Off
+### Co-Authorship & Sign-Off
 
-| Role | Engineer | Sign-Off | Date |
+| Role | Engineer | Sign-off | Date |
 |---|---|:---:|:---:|
-| Backend Resilience & Architecture Lead (Stories 11.4 & 11.5) | Juan David Quintero | **APPROVED** | 2026-11-09 |
-| Test Automation & CI Quality Gate Lead (Story 11.6 & E2E) | Juan Andrés Cano | **APPROVED** | 2026-11-09 |
-
+| Backend Resilience & Architecture Lead (Stories 11.4 & 11.5) | Juan David Quintero | Approved (his own written reply) | 2026-11-09 |
+| Test Automation & CI Quality Gate Lead (Story 11.6 & E2E) | Juan Andrés Cano | **PENDING: to be signed by J. A. Cano himself** | |

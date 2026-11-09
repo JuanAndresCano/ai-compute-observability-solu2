@@ -255,15 +255,15 @@ npm run test:e2e:report
 | Dimension | Standard | Result | Verified by |
 |---|---|:---:|---|
 | Flow A (ATDD-First) | Red phase documented, zero sleeps, peak preserved | **PASS** | Juan David Quintero |
-| Flow D (Quality Gate / NFR) | k6 load p95 < 50 ms (1.15 ms), zero crash | **PASS** | Juan David Quintero & Juan Andrés Cano |
+| Flow D (Quality Gate / NFR) | k6 load p95 < 50 ms (1.29 ms ingestion; 1.38 ms incident storm, hosted run 42654308692), zero crash | **PASS** | Juan David Quintero & Juan Andrés Cano |
 | Flow E (Playwright E2E + POM) | POM, zero waitForTimeout, trace.zip | **PASS** | Juan Andrés Cano |
-| Branch Coverage | $\ge 90\%$ on domain + application | **90.47%** | Both Partners |
+| Branch Coverage | $\ge 90\%$ on domain + application | **91.91 %** | Both Partners |
 | Traceability Matrix | 20 PASS, 0 PENDING, 0 unmapped | **PASS** | Both Partners |
-| AI Governance Log | $\ge 8$ interactions, $\ge 2$ test corrections | **18 interactions, 4 test corrections** | Both Partners |
+| AI Governance Log | $\ge 8$ interactions, $\ge 2$ test corrections | **21 interactions; 3 test corrections with evidence in the repo (14, 15, 16) + 2 attested (18, 19)** | Both Partners |
 
 ### Official Approval & Co-Authorship
 
 | Role | Engineer | Decision | Date |
 |---|---|:---:|:---:|
 | Backend Resilience & Architectural Lead | Juan David Quintero | **APPROVED** | 2026-11-09 |
-| Test Automation & CI Quality Gate Lead | Juan Andrés Cano | **APPROVED** | 2026-11-09 |
+| Test Automation & CI Quality Gate Lead | Juan Andrés Cano | **PENDING: to be signed by J. A. Cano himself** | |
