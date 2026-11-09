@@ -8,6 +8,7 @@
  *   POST /v1/nodes/:node_id/cordon         isolate a node, emits `node.cordoned` audit event
  *   GET  /v1/nodes/:node_id/logs           recent stderr / syslog lines (drawer)
  *   GET  /v1/audit-events                  activity feed, newest first
+ *   GET  /v1/incidents                     active composite incidents (Story 11.5, AD-28)
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -56,6 +57,11 @@ export async function handleObservabilityRoute(
 
   if (pathname === '/v1/nodes/cordoned' && method === 'GET') {
     sendJson(res, 200, { node_ids: system.cordon.listCordonedNodeIds() });
+    return true;
+  }
+
+  if ((pathname === '/v1/incidents' || pathname === '/api/v1/incidents') && method === 'GET') {
+    sendJson(res, 200, { incidents: system.incidents.listActiveIncidents() });
     return true;
   }
 

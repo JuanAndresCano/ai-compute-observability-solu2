@@ -96,6 +96,8 @@ export function createHttpServer(system: System, config: AppConfig, startedAtMs:
             gpu_utilization_pct: item.gpu_util_pct ?? item.gpu_utilization_pct ?? 0,
             active_jobs_count: item.active_jobs_count ?? 0,
             current_subject: item.current_subject ?? 'CS-480',
+            ...(item.fan_rpm !== undefined ? { fan_rpm: item.fan_rpm } : {}),
+            ...(item.dropped_tokens !== undefined ? { dropped_tokens: item.dropped_tokens } : {}),
           }));
 
           batch = {

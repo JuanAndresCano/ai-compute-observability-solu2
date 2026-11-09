@@ -73,6 +73,27 @@ Error: Failed to load url ../../src/adapters/inbound/websocket-server. Does the 
    ✓ correlates thermal spike >85C, fan 0 RPM, and dropped tokens into a single CRITICAL_COOLING_FAILURE incident
 ```
 
+### Wiring added after review (vertical slice, 2026-11-09)
+
+The correlator was initially delivered as an isolated domain service (matrix gap G-12). After J. A. Cano's review it was hardened and connected end to end:
+
+```text
+POST /v1/telemetry/batches  ->  TelemetryIngestionService  --AnomalyObserverPort-->  IncidentCorrelationService
+   (events may carry fan_rpm, dropped_tokens)                    THERMAL_SPIKE  temperature_celsius > 85
+                                                                 FAN_FAILURE    fan_rpm === 0
+                                                                 DROPPED_TOKENS dropped_tokens > 0
+                                                                          |
+                                                         CompositeIncidentCorrelator (30 s sliding window per node)
+                                                                          |-> audit event `incident.created` (EventDispatcherPort)
+                                                                          '-> GET /v1/incidents (IncidentsPort)
+```
+
+- **Contract decision (human, J. A. Cano):** `fan_rpm` (number 0..30,000) and `dropped_tokens` (integer ≥ 0) are optional fields of `NodeTelemetryPacketDTO`; absent = not reported, never a signal. Recorded as AMD-21 in `contracts.md`; validated in ingestion (422 otherwise).
+- **Anomaly time is the server clock** at ingestion, so a node with a skewed or hostile timestamp cannot move the correlator's per-node high-water mark.
+- **Correlation never fails ingestion:** an observer error is counted in `incident_correlation_errors_total`.
+- **Tests:** `test/harness/incidents.test.ts` (21, real HTTP server: the 3-batch scenario → exactly one `CRITICAL_COOLING_FAILURE`, duplicates suppressed, no cross-node combination, expiry after 31 s of silence, array stream format, field validation, failure isolation) and `test/integration/story_11_5_*` (domain, 20). Disconnecting the observer makes 5 of the 21 fail.
+- **k6 variant:** `tests/nfr/composite-incident-load.js` (50 VUs; teardown asserts exactly 31 incidents, one per node, from thousands of anomalies). A Node emulation of the same request pattern against the built server gave 14,342 requests, all HTTP 200 and accepted, **31 incidents**, evidence capped at 100 per incident, 42,933 duplicates suppressed. **k6 itself has not run it yet: results `TODO` until the hosted `nfr-k6` job runs it** (added as a second step of that job).
+
 ### k6 Non-Functional Requirement (NFR) Load Test Summary
 Script: `tests/nfr/composite-alert-load.js` (50 virtual users, 25 s, thresholds `p(95)<50 ms`, `p(99)<100 ms`, error rate `< 1 %`).
 
@@ -92,7 +113,7 @@ Script: `tests/nfr/composite-alert-load.js` (50 virtual users, 25 s, thresholds 
 | Check `event was accepted` (200 ⇒ `accepted_count === 1`) | 100 % | **100 %** (40,860 / 40,860 checks) | PASS |
 | Throughput / VUs | n/a | 13,620 requests, 544 req/s, up to 49 of 50 VUs, 25 s | informational |
 
-Not exercised by this script: the `CompositeIncidentCorrelator` (see matrix G-12). The script load-tests telemetry ingestion with valid batches; latencies are low because the service is in-memory SQLite on a loopback connection.
+This first script load-tests telemetry ingestion with valid batches and does not exercise the correlator (the second script above does); latencies are low because the service is in-memory SQLite on a loopback connection.
 
 ---
 

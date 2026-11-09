@@ -150,6 +150,7 @@ This log documents **7 significant AI interactions**, featuring **4 explicit hum
 | 14 | 11.4 test: hardcoded sleep + vacuous ≤ 10 assertion | AI audit; human approved the fix; mutation-checked |
 | 15 | `batch_id` message vs check; events bound 5,001 vs contract 5,000 | Human review (Cano) caught both; AI verified against the contract |
 | 16 | Correlator: unbounded memory, no expiry, fixed window, out-of-order | Human review (Cano); AI verified each claim, fixed, added 19 tests |
+| 17 | Wiring the correlator; source of DROPPED_TOKENS | Human contract decision (Cano); AI built the slice and did not decide |
 
 ### Interaction 1 — Wrong PDF treated as the Impl-2 statement
 * **Prompt:** "Review the repo and the attached PDF with the context for Impl-2; implement Story 11.6 (pages 30–32)."
@@ -245,7 +246,14 @@ This log documents **7 significant AI interactions**, featuring **4 explicit hum
 * **Test weakness (also from the review):** the only test was a single happy path. 19 tests added in `story_11_5_correlator_hardening.test.ts` (4 simultaneous events at one millisecond as in the Annex BDD, 15 s window, memory cap under 10,000 duplicates, expiry boundary at exactly 30,000 ms, sustained failure, out-of-order, strict `> 85.0`, fan > 0, zero dropped tokens, node isolation, `LATENCY_BREACH` ignored). Run against the previous implementation, 6 of them fail (some because the new API did not exist, the rest on behaviour: expiry, out-of-order, stale events).
 * **Classification:** human review of an AI-generated service and its test; four real defects fixed.
 
+### Interaction 17 — Wiring the correlator: the contract decision stays with the human
+* **Human direction (J. A. Cano):** connect the correlator as a minimal vertical slice with a clear cut rule (fall back to "service level" if the contract breaks too many tests). The review noted that `FAN_FAILURE` and `DROPPED_TOKENS` cannot be produced because the telemetry DTO has no `fan_rpm` and no dropped-token field, and that **choosing the source of `DROPPED_TOKENS` is a contract decision for the human, not the AI**.
+* **AI behaviour:** it did not choose. It implemented everything that did not depend on the choice first (correlator hardening, interaction 16), checked the Annex (11.5 requires the correlator, an integration test with 4 simultaneous events and exactly one `CRITICAL_COOLING_FAILURE`; it does **not** require an endpoint or a stream, so the wiring goes beyond the letter of the Annex), then asked the human with three options and a recommendation.
+* **Human decision:** optional `dropped_tokens` (integer ≥ 0) and `fan_rpm` fields on the telemetry event (rejected alternatives: deriving from the capacity tail-drop, which conflates dropped *events* with lost *tokens*; adding the field to `inference_metrics`, which changes another operation's contract).
+* **Implementation notes by the AI, for review:** anomaly time is the server clock (a node-supplied timestamp could freeze the correlator's per-node high-water mark); correlation errors are counted, never fail an ingestion; `GET /v1/incidents` chosen over a WebSocket frame for symmetry with `/v1/alerts` (not asked: `TODO(team)` confirm).
+* **Cut rule:** not triggered. Contract change cost: 0 failing existing tests (the fields are optional). 393 → 418 Vitest tests, all green (21 new HTTP tests plus 4 purity tests that now scan the new `src/` files); branch coverage 91.9 %; disconnecting the observer fails 5 of the 21 HTTP tests.
+
 ## Impl-2 governance summary (this branch)
-* Interactions logged: **16** (≥ 8 required for the whole team; partner entries still to be appended).
-* Human-steered decisions: 1, 2, 4, 5. AI-flagged / test-caught issues: 3, 6, 7, 8, 9, 10, 11, 12. Human-triggered: 13 (CI run pasted by the human), 14 (human approved the correction of A/B), 15 and 16 (human code review).
+* Interactions logged: **17** (≥ 8 required for the whole team; partner entries still to be appended).
+* Human-steered decisions: 1, 2, 4, 5. AI-flagged / test-caught issues: 3, 6, 7, 8, 9, 10, 11, 12. Human-triggered: 13 (CI run pasted by the human), 14 (human approved the correction of A/B), 15 and 16 (human code review), 17 (human contract decision).
 * **Open item `TODO(team)`:** record at least 2 genuine human corrections of AI-written tests (e.g. an over-mocked test or a rejected `sleep`) from the partner's Stories 11.4/11.5 or from review of this branch, with the exact before/after.

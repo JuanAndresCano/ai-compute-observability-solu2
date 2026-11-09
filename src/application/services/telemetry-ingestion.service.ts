@@ -11,6 +11,7 @@ import type {
   CellFreshnessType,
   AcademicSubjectType,
 } from '../../dto';
+import type { AnomalyObserverPort } from '../../ports/out/anomaly-observer.port';
 import type { TelemetryIngestionPort } from '../../ports/in/telemetry-ingestion.port';
 import type { Deps } from '../../composition';
 import { BucketDecimator, type DecimatedBucket } from '../../domain/services/bucket-decimator';
@@ -31,6 +32,7 @@ export class TelemetryIngestionService implements TelemetryIngestionPort {
   private readonly watchdog: NodeHeartbeatWatchdog;
   private readonly windows: SlidingWindowAssembler;
   private readonly ring: TelemetryRingBuffer;
+  private readonly anomalies?: AnomalyObserverPort;
 
   private cumulativeDropped = 0;
   private arrivalHistory: { timeMs: number; count: number }[] = [];
@@ -42,8 +44,10 @@ export class TelemetryIngestionService implements TelemetryIngestionPort {
       watchdog?: NodeHeartbeatWatchdog;
       windows?: SlidingWindowAssembler;
       ring?: TelemetryRingBuffer;
+      anomalies?: AnomalyObserverPort;
     },
   ) {
+    this.anomalies = options?.anomalies;
     this.ring = options?.ring ?? new TelemetryRingBuffer(FLEET_SERIES_INFO.map((s) => `${s.nodeId}:${s.gpuIndex}`));
     this.watchdog = options?.watchdog ?? new NodeHeartbeatWatchdog(deps.clock, FLEET_NODE_IDS);
     this.windows = options?.windows ?? new SlidingWindowAssembler();
@@ -117,6 +121,14 @@ export class TelemetryIngestionService implements TelemetryIngestionPort {
 
       if (ev.gpu_utilization_pct < 0.0 || ev.gpu_utilization_pct > 100.0) {
         throw this.contractError('ERR_INVALID_TELEMETRY_PAYLOAD', 422, false, `gpu_utilization_pct out of bounds: ${ev.gpu_utilization_pct}`);
+      }
+
+      if (ev.fan_rpm !== undefined && (!Number.isFinite(ev.fan_rpm) || ev.fan_rpm < 0 || ev.fan_rpm > 30000)) {
+        throw this.contractError('ERR_INVALID_TELEMETRY_PAYLOAD', 422, false, `fan_rpm must be a number in 0..30000: ${ev.fan_rpm}`);
+      }
+
+      if (ev.dropped_tokens !== undefined && (!Number.isInteger(ev.dropped_tokens) || ev.dropped_tokens < 0)) {
+        throw this.contractError('ERR_INVALID_TELEMETRY_PAYLOAD', 422, false, `dropped_tokens must be an integer >= 0: ${ev.dropped_tokens}`);
       }
 
       if (ev.timestamp_ms <= 0) {
@@ -241,6 +253,13 @@ export class TelemetryIngestionService implements TelemetryIngestionPort {
         throw this.contractError('ERR_DATABASE_UNAVAILABLE', 503, true, err.message);
       }
       throw err;
+    }
+
+    // AD-28: correlation must never fail an ingestion; a failure is counted, not swallowed silently
+    try {
+      this.anomalies?.observe(acceptedEvents);
+    } catch {
+      this.deps.metrics.increment('incident_correlation_errors_total', {}, 1);
     }
 
     if (droppedCount > 0) {

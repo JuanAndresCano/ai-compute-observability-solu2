@@ -80,6 +80,8 @@ jobs:
           cat server.log; exit 1
       - name: k6 (fails the build if p95 >= 50 ms or error rate >= 1 %)
         run: k6 run --summary-export=k6-summary.json tests/nfr/composite-alert-load.js
+      - name: k6 incident-storm variant (31 nodes, thousands of anomalies -> exactly 31 incidents)
+        run: k6 run --summary-export=k6-incidents-summary.json tests/nfr/composite-incident-load.js
       - name: Upload k6 summary and server log
         if: always()
         uses: actions/upload-artifact@v4
@@ -87,6 +89,7 @@ jobs:
           name: k6-results
           path: |
             k6-summary.json
+            k6-incidents-summary.json
             server.log
           retention-days: 14
           if-no-files-found: ignore

@@ -115,6 +115,8 @@ export interface NodeTelemetryPacketDTO {
   gpu_utilization_pct: number;  // 0.0 to 100.0
   active_jobs_count: number;    // >= 0
   current_subject: AcademicSubjectType;
+  fan_rpm?: number;             // Optional (AD-28, Impl-2): >= 0; 0 = failed fan
+  dropped_tokens?: number;      // Optional (AD-28, Impl-2): integer >= 0 tokens the node dropped since its last report
 }
 
 export interface InferenceMetricPacketDTO {

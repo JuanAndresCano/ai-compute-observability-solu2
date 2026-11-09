@@ -13,6 +13,8 @@ import type { ForensicsPort } from './ports/in/forensics.port';
 import type { MonitoringPort } from './ports/in/monitoring.port';
 import type { CordonPort } from './ports/in/cordon.port';
 import type { AuditTrailPort } from './ports/out/audit-trail.port';
+import type { IncidentsPort } from './ports/in/incidents.port';
+import { IncidentCorrelationService } from './application/services/incident-correlation.service';
 import { NodeCordonService } from './application/services/node-cordon.service';
 import { TelemetryRingBuffer } from './domain/models/telemetry-ring-buffer';
 import { FLEET_SERIES_IDS } from './domain/models/fleet';
@@ -50,6 +52,7 @@ export interface System {
   forensics: ForensicsPort;
   monitor: MonitoringPort;
   cordon: CordonPort;
+  incidents: IncidentsPort;
   auditTrail: AuditTrailPort;
   logs: NodeLogPort;
   /** The process-wide ring buffer (AD-02); built on first access. */
@@ -61,7 +64,8 @@ export interface System {
 export function createSystem(deps: Deps): System {
   const ring = new TelemetryRingBuffer(FLEET_SERIES_IDS);
   const windows = new SlidingWindowAssembler(deps.clock);
-  const ingest = new TelemetryIngestionService(deps, { ring, windows });
+  const incidents = new IncidentCorrelationService(deps);
+  const ingest = new TelemetryIngestionService(deps, { ring, windows, anomalies: incidents });
   const watchdog = ingest.getWatchdog();
   const monitor = new NodeMonitorService(watchdog, deps);
 
@@ -73,6 +77,7 @@ export function createSystem(deps: Deps): System {
     forensics: new ForensicsService(deps, watchdog),
     monitor,
     cordon: new NodeCordonService(deps.clock, deps.events),
+    incidents,
     auditTrail: deps.auditTrail ?? { recent: () => [] },
     logs: deps.logs,
     ring,
