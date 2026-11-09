@@ -92,7 +92,18 @@ POST /v1/telemetry/batches  ->  TelemetryIngestionService  --AnomalyObserverPort
 - **Anomaly time is the server clock** at ingestion, so a node with a skewed or hostile timestamp cannot move the correlator's per-node high-water mark.
 - **Correlation never fails ingestion:** an observer error is counted in `incident_correlation_errors_total`.
 - **Tests:** `test/harness/incidents.test.ts` (21, real HTTP server: the 3-batch scenario → exactly one `CRITICAL_COOLING_FAILURE`, duplicates suppressed, no cross-node combination, expiry after 31 s of silence, array stream format, field validation, failure isolation) and `test/integration/story_11_5_*` (domain, 20). Disconnecting the observer makes 5 of the 21 fail.
-- **k6 variant:** `tests/nfr/composite-incident-load.js` (50 VUs; teardown asserts exactly 31 incidents, one per node, from thousands of anomalies). A Node emulation of the same request pattern against the built server gave 14,342 requests, all HTTP 200 and accepted, **31 incidents**, evidence capped at 100 per incident, 42,933 duplicates suppressed. **k6 itself has not run it yet: results `TODO` until the hosted `nfr-k6` job runs it** (added as a second step of that job).
+- **k6 variant:** `tests/nfr/composite-incident-load.js` (50 VUs; teardown asserts exactly 31 incidents, one per node, from thousands of anomalies). A Node emulation of the same request pattern against the built server gave 14,342 requests, all HTTP 200 and accepted, **31 incidents**, evidence capped at 100 per incident, 42,933 duplicates suppressed. **Hosted result ([run 42654308692](https://github.com/JuanAndresCano/ai-compute-observability-solu2/actions/runs/42654308692), commit `61a8eb1`):** all 3 jobs passed (`verify` 28 s, `e2e` 32 s, `nfr-k6` 57 s, up from 39 s because it now runs both scripts). k6 exits non-zero when any threshold is crossed, so the green job means the incident-storm script met `p(95)<50 ms`, `p(99)<100 ms`, `http_req_failed<1 %` and `incident_dedup_ok rate==1` (exactly 31 incidents, one per node, from thousands of anomalies). Values copied from the job log:
+
+| Metric (`composite-incident-load.js`, 50 VUs, 16 s) | Target | Measured | Status |
+|---|:---:|:---:|:---:|
+| p95 latency | < 50 ms | **1.38 ms** | PASS |
+| p99 latency | < 100 ms | **1.96 ms** | PASS |
+| Error rate (`http_req_failed`) | < 1 % | **0.00 %** (0 of 12,761) | PASS |
+| `incident_dedup_ok` (exactly 31 incidents, one per node, one type, checked in `teardown`) | rate == 1 | **100 %** (1 of 1) | PASS |
+| Checks `status is 200 or 429`, `event was accepted` | 100 % | **100 %** (25,520 / 25,520) | PASS |
+| Throughput | n/a | 12,761 requests, 797 req/s, 50 VUs | informational |
+
+The first script, re-run in the same job on this commit, gave p95 **1.29 ms**, p99 **1.92 ms**, errors **0.00 %** (0 of 13,617), all 40,851 checks passing (544 req/s): consistent with the earlier run (1.15 ms / 1.78 ms). Latencies are low because the service is in-memory SQLite on a loopback connection; the useful evidence of the second script is the correctness check (31 incidents from ~38,000 anomalies), not the speed.
 
 ### k6 Non-Functional Requirement (NFR) Load Test Summary
 Script: `tests/nfr/composite-alert-load.js` (50 virtual users, 25 s, thresholds `p(95)<50 ms`, `p(99)<100 ms`, error rate `< 1 %`).
@@ -177,7 +188,7 @@ Running 3 tests using 1 worker
   3 passed (5.4s)
 ```
 
-Full gate (`npm run ci`): typecheck OK · harness 5 files / 145 tests · ATDD 157 tests (**302 / 302**) · `trace:check` OK · `readiness:check` OK.
+Full gate at the time Story 11.6 was first committed (`npm run ci`): typecheck OK · harness 5 files / 145 tests · ATDD 157 tests (302 / 302) · `trace:check` OK · `readiness:check` OK. **Current totals are in §6** (418 Vitest + 5 Playwright).
 
 **Not a "blindly green" suite — deliberate break.** To prove the spec can fail, the view threshold was temporarily changed from 88 to 95 (`THERMAL_ALERT_C`) and the suite run with `CI=1` (retries=1). Result (then reverted with `git checkout`):
 
@@ -200,19 +211,20 @@ Full gate (`npm run ci`): typecheck OK · harness 5 files / 145 tests · ATDD 15
   (plus `test-failed-1.png` and `video.webm`).
 - A full-pass run with `npx playwright test --trace=on` produced one `trace.zip` for each of the 3 tests.
 - Open with `npx playwright show-trace <path>/trace.zip` to see DOM snapshots, the drawer slide-out and the cordon button click.
-- **TODO(team):** CI does not exist in this repo (no `.github/`). To meet "trace.zip captured on CI", copy `test/ci/quality-gate.yml` to `.github/workflows/`, add `npx playwright test` and upload `test-results/` as an artifact on failure.
+- **CI:** `.github/workflows/ci.yml` runs the suite on every push to `main` and uploads `test-results/` (traces, only present when a test needed a retry) and `playwright-report/` as artifacts; see §7b. Latest hosted run: [42654308692](https://github.com/JuanAndresCano/ai-compute-observability-solu2/actions/runs/42654308692), 3 / 3 jobs green.
 
 
 ## 6. Multi-layer test execution summary
 
-Verified on `main` after merging `feature/impl2-e2e-playwright` and `feature/impl2-backend-resilience` (`npm run ci` + `npm run test:e2e`):
+Verified on `main` at commit `61a8eb1` (`npm run ci:full`, also green on hosted CI, run 42654308692):
 
 ```text
-Vitest harness config : 8 files, 198 tests   (fixtures 36, schema 35, scaffold 8, cordon 16, purity 52, integration/story_11_5 1,
-                                              domain-branches 40, service-branches 10)
-Vitest ATDD config    : 2 files, 158 tests   (157 contracts + story_11_4_ws_storm 1)
-Playwright (Flow E)   : 1 spec,   3 tests    (3 passed, 5.4 s)
-Branch coverage       : 90.47 % (399/441) on src/domain + src/application, enforced by `npm run test:coverage`
+Vitest harness config : 11 files, 260 tests  (fixtures, schema, scaffold, purity, cordon 16, domain-branches 40, service-branches 10,
+                                              ingestion batch_id/limits, incidents 21 through real HTTP, integration/story_11_5 x2: 1 + 19)
+Vitest ATDD config    : 2 files,  158 tests  (157 contracts + story_11_4_ws_storm 1)
+Vitest total          : 418 tests
+Playwright (Flow E)   : 2 specs,  5 tests    (3 triage + 2 accessibility/axe; 5 passed, ~6.6 s on hosted CI)
+Branch coverage       : 91.91 % on src/domain + src/application, enforced (>= 90) by `npm run test:coverage`
 typecheck / trace:check / readiness:check : OK
 ```
 
@@ -222,7 +234,7 @@ Merge notes: (1) the partner's `ConsoleUiDispatch.dispatch` iterated `snapshot.n
 
 ## 7. Traceability
 
-See [`traceability-matrix.md`](traceability-matrix.md): 25 requirements, 0 unmapped, 17 PASS / 8 PENDING at the time of this commit. Close the PENDING rows only with real evidence (section 6 of the matrix lists the commands).
+See [`traceability-matrix.md`](traceability-matrix.md): 26 requirements, 0 unmapped, 20 PASS, 0 PENDING, 6 DEFERRED (out of the Impl-2 Annex scope, each with its rationale and cost to close). Latest hosted CI run 42654308692 is green.
 
 ## 7b. Quality gate and CI
 
