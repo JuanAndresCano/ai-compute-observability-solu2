@@ -143,6 +143,8 @@ This log documents **7 significant AI interactions**, featuring **4 explicit hum
 | 7 | `pkill` killed the shell, files silently not written | AI, via `git status` |
 | 8 | Proving the spec is not "blindly green" | AI-proposed, evidence in walkthrough |
 | 9 | Trace mode `on-first-retry` vs `retain-on-failure` | Spec text corrected AI's plan |
+| 10 | Merge of the partner's branch | AI re-ran the gate; found a type error and a never-run test |
+| 11 | Branch coverage 83.87 % → 90.47 % | Test execution caught 2 AI test mistakes |
 
 ### Interaction 1 — Wrong PDF treated as the Impl-2 statement
 * **Prompt:** "Review the repo and the attached PDF with the context for Impl-2; implement Story 11.6 (pages 30–32)."
@@ -188,7 +190,20 @@ This log documents **7 significant AI interactions**, featuring **4 explicit hum
 * **AI first plan:** `trace: 'retain-on-failure'` (suggested by the teammate's brief).
 * **Correction from the statement:** the Impl-2 text requires `trace: 'on-first-retry'`. The config was set accordingly with `retries: 1` under `CI`, and both modes were exercised (full-pass `--trace=on` and the failing retry above).
 
+### Interaction 10 — Merge: an AI-reviewed integration found two defects in the partner's branch
+* **AI action:** merged `feature/impl2-backend-resilience` into `main` and re-ran the full gate instead of trusting the reported "285 tests".
+* **Finding 1:** `ConsoleUiDispatch.dispatch` iterated `snapshot.nodes`, a field that does not exist on `FleetSnapshotDTO` (`cells` does): `tsc` failed and `docker build` (which runs `typecheck`) would have broken. Fixed minimally and reported to the partner.
+* **Finding 2:** `test/integration/` belonged to no Vitest config, so the Story 11.5 test never ran under `npm run ci`; the "285 passing" figure did not include it. Added to the harness include list.
+* **Classification:** defects caught by running the gate on the merged tree (a test-infrastructure gap: a green suite that silently skipped a test).
+
+### Interaction 11 — Raising branch coverage from 83.87 % to 90.47 % without vanity tests
+* **AI approach:** listed the uncovered branches per file, then wrote behavioural tests at boundaries (watchdog 5 s / 15 s, correlator window and the strict `> 85 °C`, token bucket refill, half-open windows, evidence fallbacks) rather than executing lines. A `thresholds.branches: 90` gate was added and proven to fail at 99 %.
+* **AI testing mistakes caught by executing the tests (not by a human reviewer):**
+  1. *Wrong expectation about the watchdog.* The AI asserted that a `RECOVERING` node silent for 15 s reports a `RECOVERING → SILENT_TIMEOUT` change. The run showed `[]`: the last reported state was already `SILENT_TIMEOUT`, so the bounce is deliberately not reported (anti-flapping). The test was corrected to assert that, plus the real state, instead of bending the production code.
+  2. *Impossible fixture.* The AI planned to corrupt `log_tail_json` to exercise the 503 path; SQLite's CHECK constraint (`json_valid(...)`) rejected the write, proving the schema already prevents that corruption. The test was replaced by an injected repository failure at the port.
+* **Why it matters:** both mistakes would have produced a misleading test (one asserting behaviour the system does not have, one testing a state that cannot exist).
+
 ## Impl-2 governance summary (this branch)
-* Interactions logged: **9** (≥ 8 required for the whole team; partner entries still to be appended).
-* Human-steered decisions: 1, 2, 4, 5. AI-flagged / test-caught issues: 3, 6, 7, 8, 9.
+* Interactions logged: **11** (≥ 8 required for the whole team; partner entries still to be appended).
+* Human-steered decisions: 1, 2, 4, 5. AI-flagged / test-caught issues: 3, 6, 7, 8, 9, 10, 11.
 * **Open item `TODO(team)`:** record at least 2 genuine human corrections of AI-written tests (e.g. an over-mocked test or a rejected `sleep`) from the partner's Stories 11.4/11.5 or from review of this branch, with the exact before/after.

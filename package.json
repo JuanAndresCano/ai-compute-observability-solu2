@@ -15,9 +15,10 @@
     "test:atdd": "vitest run --config test/vitest.atdd.config.ts",
     "test:all": "vitest run --config test/vitest.harness.config.ts && vitest run --config test/vitest.atdd.config.ts",
     "test:atdd:guard": "node test/ci/red-guard.mjs",
-    "test:coverage": "vitest run --config test/vitest.harness.config.ts --coverage",
+    "test:coverage": "vitest run --config test/vitest.coverage.config.ts --coverage",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report",
+    "ci:full": "npm run ci && npm run test:coverage && npm run test:e2e",
     "ci": "npm run typecheck && npm run test:all && npm run trace:check && npm run readiness:check",
     "trace:check": "node test/ci/trace-check.mjs",
     "readiness:check": "node test/ci/readiness-check.mjs"

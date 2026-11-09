@@ -176,9 +176,11 @@ Full gate (`npm run ci`): typecheck OK · harness 5 files / 145 tests · ATDD 15
 Verified on `main` after merging `feature/impl2-e2e-playwright` and `feature/impl2-backend-resilience` (`npm run ci` + `npm run test:e2e`):
 
 ```text
-Vitest harness config : 6 files, 148 tests   (fixtures 36, schema 35, scaffold 8, cordon 16, purity 52, integration/story_11_5 1)
+Vitest harness config : 8 files, 198 tests   (fixtures 36, schema 35, scaffold 8, cordon 16, purity 52, integration/story_11_5 1,
+                                              domain-branches 40, service-branches 10)
 Vitest ATDD config    : 2 files, 158 tests   (157 contracts + story_11_4_ws_storm 1)
-Playwright (Flow E)   : 1 spec,   3 tests    (3 passed, 5.6 s)
+Playwright (Flow E)   : 1 spec,   3 tests    (3 passed, 5.4 s)
+Branch coverage       : 90.47 % (399/441) on src/domain + src/application, enforced by `npm run test:coverage`
 typecheck / trace:check / readiness:check : OK
 ```
 
@@ -190,11 +192,16 @@ Merge notes: (1) the partner's `ConsoleUiDispatch.dispatch` iterated `snapshot.n
 
 See [`traceability-matrix.md`](traceability-matrix.md): 25 requirements, 0 unmapped, 17 PASS / 8 PENDING at the time of this commit. Close the PENDING rows only with real evidence (section 6 of the matrix lists the commands).
 
+## 7b. Quality gate and CI
+
+- **Coverage gate:** `test/vitest.coverage.config.ts` runs every Vitest suite and fails below 90 % branch coverage on domain + application (Impl-1 measured 83.87 %; 50 new tests in `domain-branches.test.ts` and `service-branches.test.ts` raised it to 90.47 %). The threshold was verified to fail (exit 1 at 99 %).
+- **Workflow:** `.github/workflows/ci.yml` has three jobs: `verify` (typecheck, `test:all`, coverage gate, trace/readiness), `e2e` (Playwright, `CI=true` → retries 1 → `trace.zip` on first retry, uploaded as the `playwright-test-results` artifact) and `nfr-k6` (starts the server and runs the partner's k6 script; uploads `k6-summary.json`). **It has not run on GitHub yet**: check the Actions tab after the first push.
+- **Single command:** `npm run ci:full` = `ci` + `test:coverage` + `test:e2e`.
+
 ## 8. How to reproduce
 
 ```bash
 npm ci
-npm run ci           # typecheck + 302 tests + trace/readiness checks
-npm run test:e2e     # builds, starts the server on :4311, runs Playwright
+npm run ci:full      # typecheck + 356 Vitest tests + trace/readiness + 90 % branch gate + Playwright
 npm run test:e2e:report
 ```

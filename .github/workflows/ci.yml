@@ -1,0 +1,92 @@
+# Module 11 quality gate (Impl-2). One command locally reproduces everything below: `npm run ci:full`.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, unit/ATDD, coverage gate, traceability
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Typecheck (tsc --strict)
+        run: npm run typecheck
+      - name: Harness, schema, architecture, integration and ATDD suites
+        run: npm run test:all
+      - name: Branch coverage gate (>= 90 % on domain + application)
+        run: npm run test:coverage
+      - name: Traceability and readiness checks
+        run: npm run trace:check && npm run readiness:check
+
+  e2e:
+    name: Playwright E2E (Flow E) with forensic traces
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run Playwright (CI=true -> retries=1, trace on first retry)
+        run: npm run test:e2e
+      # trace.zip files only exist for tests that needed a retry; screenshots/videos only for failures.
+      - name: Upload traces, screenshots and videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  nfr-k6:
+    name: k6 NFR load test (Flow D)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build
+      - uses: grafana/setup-k6-action@v1
+      - name: Start the console
+        run: |
+          PORT=8080 HOST=127.0.0.1 NODE_ENV=production node dist/src/server.js > server.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8080/health >/dev/null && exit 0; sleep 1; done
+          cat server.log; exit 1
+      - name: k6 (fails the build if p95 >= 50 ms or error rate >= 1 %)
+        run: k6 run --summary-export=k6-summary.json tests/nfr/composite-alert-load.js
+      - name: Upload k6 summary and server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results
+          path: |
+            k6-summary.json
+            server.log
+          retention-days: 14
+          if-no-files-found: ignore
