@@ -42,20 +42,16 @@ class ConsoleUiDispatch implements UiDispatchPort {
 
   dispatch(snapshot: FleetSnapshotDTO): void {
     if (!this.wsHandler) return;
-    for (const node of snapshot.nodes) {
-      for (const gpu of node.gpus) {
-        this.wsHandler.broadcastTelemetryEvent({
-          node_id: node.node_id,
-          gpu_index: gpu.gpu_index,
-          timestamp_ms: snapshot.timestamp_ms,
-          temperature_celsius: gpu.temperature_celsius,
-          vram_used_bytes: gpu.vram_used_bytes,
-          vram_total_bytes: gpu.vram_total_bytes,
-          gpu_utilization_pct: gpu.gpu_utilization_pct,
-          active_jobs_count: node.active_jobs_count,
-          current_subject: node.current_subject,
-        });
-      }
+    for (const cell of snapshot.cells) {
+      this.wsHandler.broadcastTelemetryEvent({
+        node_id: cell.node_id,
+        gpu_index: cell.gpu_index,
+        timestamp_ms: snapshot.bucket_start_ms,
+        temperature_celsius: cell.temperature_celsius,
+        vram_used_bytes: cell.vram_used_bytes,
+        vram_total_bytes: cell.vram_total_bytes,
+        gpu_utilization_pct: cell.gpu_utilization_pct,
+      });
     }
   }
 }
