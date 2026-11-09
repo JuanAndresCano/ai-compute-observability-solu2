@@ -14,6 +14,8 @@ import { SqliteForensicsRepo } from './adapters/db/sqlite-forensics-repo';
 import { SimNodeLog } from './adapters/sim/sim-node-log';
 import { SimJobRegistry } from './adapters/sim/sim-job-registry';
 import { createHttpServer } from './adapters/inbound/http-server';
+import { StreamDownsampler } from './domain/services/stream-downsampler';
+import { WebSocketStreamHandler } from './adapters/inbound/websocket-server';
 import type { EventDispatcherPort, AuditEvent } from './ports/out/event-dispatcher.port';
 import type { MetricsPort } from './ports/out/metrics.port';
 import type { UiDispatchPort } from './ports/out/ui-dispatch.port';
@@ -66,12 +68,17 @@ export async function bootstrap(): Promise<{ stop: () => Promise<void> }> {
   const system = createSystem(deps);
   const httpServer = createHttpServer(system, config);
 
+  const downsampler = new StreamDownsampler({ maxOutputHz: 10 });
+  const wsHandler = new WebSocketStreamHandler(httpServer.server, downsampler);
+  wsHandler.start();
+
   await httpServer.start();
   // eslint-disable-next-line no-console
-  console.log(`AI Infrastructure Observability Console listening on http://${config.host}:${config.port}`);
+  console.log(`AI Infrastructure Observability Console listening on http://${config.host}:${config.port} (WebSocket on /ws/telemetry)`);
 
   return {
     async stop(): Promise<void> {
+      await wsHandler.stop();
       await httpServer.stop();
       db.close();
     },
