@@ -5,7 +5,7 @@
 import { loadConfig } from './config';
 import { initDatabase } from './adapters/db/database';
 import { createSystem, type Deps } from './composition';
-import { FakeClock } from './adapters/sim/fake-clock';
+import { SystemClock } from './adapters/system-clock';
 import { SequentialIdGenerator } from './adapters/sim/sequential-id-generator';
 import { SqliteTelemetryRepo } from './adapters/db/sqlite-telemetry-repo';
 import { SqliteAlertRepo } from './adapters/db/sqlite-alert-repo';
@@ -15,6 +15,8 @@ import { SimNodeLog } from './adapters/sim/sim-node-log';
 import { SimJobRegistry } from './adapters/sim/sim-job-registry';
 import { InMemoryAuditTrail } from './adapters/memory/in-memory-audit-trail';
 import { createHttpServer } from './adapters/inbound/http-server';
+import { StreamDownsampler } from './domain/services/stream-downsampler';
+import { WebSocketStreamHandler } from './adapters/inbound/websocket-server';
 import type { MetricsPort } from './ports/out/metrics.port';
 import type { UiDispatchPort } from './ports/out/ui-dispatch.port';
 import type { FleetSnapshotDTO } from './dto';
@@ -26,8 +28,25 @@ class ConsoleMetrics implements MetricsPort {
 }
 
 class ConsoleUiDispatch implements UiDispatchPort {
-  dispatch(_snapshot: FleetSnapshotDTO): void {
-    // UI dispatch pipeline
+  private wsHandler?: WebSocketStreamHandler;
+
+  setWsHandler(ws: WebSocketStreamHandler): void {
+    this.wsHandler = ws;
+  }
+
+  dispatch(snapshot: FleetSnapshotDTO): void {
+    if (!this.wsHandler) return;
+    for (const cell of snapshot.cells) {
+      this.wsHandler.broadcastTelemetryEvent({
+        node_id: cell.node_id,
+        gpu_index: cell.gpu_index,
+        timestamp_ms: snapshot.bucket_start_ms,
+        temperature_celsius: cell.temperature_celsius,
+        vram_used_bytes: cell.vram_used_bytes,
+        vram_total_bytes: cell.vram_total_bytes,
+        gpu_utilization_pct: cell.gpu_utilization_pct,
+      });
+    }
   }
 }
 
@@ -35,7 +54,7 @@ export async function bootstrap(): Promise<{ stop: () => Promise<void> }> {
   const config = loadConfig();
   const db = initDatabase({ dbPath: config.dbPath });
 
-  const clock = new FakeClock(Date.now());
+  const clock = new SystemClock();
   const ids = new SequentialIdGenerator();
   const auditTrail = new InMemoryAuditTrail();
   const metrics = new ConsoleMetrics();
@@ -70,12 +89,18 @@ export async function bootstrap(): Promise<{ stop: () => Promise<void> }> {
   const system = createSystem(deps);
   const httpServer = createHttpServer(system, config);
 
+  const downsampler = new StreamDownsampler({ maxOutputHz: 10 });
+  const wsHandler = new WebSocketStreamHandler(httpServer.server, downsampler);
+  ui.setWsHandler(wsHandler);
+  wsHandler.start();
+
   await httpServer.start();
   // eslint-disable-next-line no-console
-  console.log(`AI Infrastructure Observability Console listening on http://${config.host}:${config.port}`);
+  console.log(`AI Infrastructure Observability Console listening on http://${config.host}:${config.port} (WebSocket on /ws/telemetry)`);
 
   return {
     async stop(): Promise<void> {
+      await wsHandler.stop();
       await httpServer.stop();
       db.close();
     },

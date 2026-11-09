@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     globals: true,
-    include: ['test/harness/**/*.test.ts', 'test/schema/**/*.test.ts', 'test/architecture/**/*.test.ts'],
+    include: ['test/harness/**/*.test.ts', 'test/schema/**/*.test.ts', 'test/architecture/**/*.test.ts', 'test/integration/**/*.test.ts'],
     coverage: { provider: 'v8', include: ['src/adapters/sim/**', 'test/fixtures/**'], reporter: ['text'] },
   },
 });

@@ -21,6 +21,7 @@ No hosted CI exists in this repo (`.github/` is absent; `test/ci/quality-gate.ym
 | CI-2 | `npm run trace:check` | OK: 46 matrix rows, 136 test IDs traced, 136 tags in code, 2 documented GAP rows, 8 bound invariant tests |
 | CI-3 | `npm run typecheck` | OK (`tsc --noEmit`, no errors) |
 | CI-4 | `npm run readiness:check` | `READINESS CHECK: no structural problem found` |
+| CI-7 | `npm run test:all` on `main` after merging both branches | **306 / 306 passed**: harness config 6 files / 148 tests (adds `test/integration/` to the include list: it was silently never run) + ATDD 2 files / 158 tests (157 contracts + `story_11_4_ws_storm`). `typecheck`, `trace:check`, `readiness:check` OK. |
 | CI-5 | `npm run test:e2e` (Playwright 1.64.0, Chromium, `retries=0` locally) | **3 / 3 passed** (`heatmap-triage.spec.ts`), 0 failed, 0 flaky. A run with `--trace=on` produced one `trace.zip` per test under `test-results/`; the config uses `trace: 'on-first-retry'` for CI (`retries: 1`). |
 | CI-6 | `npm run ci` after adding Story 11.6 (typecheck, `test:all`, `trace:check`, `readiness:check`) | typecheck OK; harness 5 files / 145 tests (adds `cordon.test.ts` 16, and `purity` now scans the 4 new `src/` files) + ATDD 157 = **302 / 302 passed**; `trace:check` and `readiness:check` OK. k6 / WebSocket (11.4, 11.5): not run, partner branch. |
 
@@ -60,10 +61,11 @@ Test-file paths (all verified to exist): `test/atdd/observability_contracts.test
 | FR-03a | Forensic drill-down data for a silent node (frozen snapshot, ≤ 50-line tail, last job, timeline, `CORDON_RECOMMENDED`) — backend only | supp. Op 4 (feeds 11.6) | `observability_contracts.test.ts`: C4-P1, C4-P2, C4-Q1a/b, C4-REC, C4-EMPTY, C4-Q2/Q3/Q4, C4-I1, C4-I2, C4-CON, C4-Qfail; `schema.contract.test.ts`: S-04c, S-04d | CI-1 | PASS |
 | FR-04 | 7-day executive utilization report, subjects, idle, peak contention, empty state, refusals (backend only) | supp. Op 3 (outside 11.1–11.6) | `observability_contracts.test.ts`: C3-P1a/b, C3-P2, C3-P3, C3-Q1a/b/c, C3-Q2, C3-Q3, C3-Q4a/b, C3-I1, C3-I2a, C3-EMPTY-a/b, C3-CON, C3-Qfail; `schema.contract.test.ts`: S-06a..S-06d | CI-1 | PASS |
 | NFR-06 | Report ≤ 1,500 ms | supp. Op 3 | `observability_contracts.test.ts`: C3-Q1a, C3-CON (functional); `bench/report.ts` PLANNED, not run | CI-1 | PASS (functional only, see G-5) |
-| FR-01e | **WebSocket** push of telemetry stream with fallback (PRD §1.3; ARCHITECTURE AD-01 transport) | 11.4 | Planned: WS adapter tests (path to be set by the 11.4 owner, expected under `test/`). No WS code in `src/adapters/inbound/` today (HTTP only) | none | PENDING (blocked: 11.4 lives on the partner's branch) |
-| FR-05b | Storm over the WebSocket pipeline: 5,000 ev/s still decimated to 4 Hz, `Storm Mode Active` indicator | 11.4 | Planned: WS storm test (same owner). HTTP-path storm is already PASS under 11.1 | none | PENDING (blocked: 11.4) |
-| NFR-01b | Load injector script benchmarking the WebSocket ingestion pipeline, ≥ 5,000 ev/s for ≥ 15 min (PRD NFR-01 verification method) | 11.5 | Planned: k6 script (path to be set by the 11.5 owner, e.g. `k6/storm.js`) with thresholds | none | PENDING (blocked: 11.5 lives on the partner's branch) |
-| NFR-05b | Heap ≤ 128 MB during the 15–60 min storm, measured under load | 11.5 | Planned: k6 run + `process.memoryUsage()` / heap snapshot evidence (N-05) | none | PENDING (blocked: 11.5) |
+| FR-01e | **WebSocket** push of the telemetry stream on `/ws/telemetry`, client-bound frames ≤ 10 Hz with peak temperature preserved (AD-27) | 11.4 | `test/atdd/story_11_4_ws_storm.test.ts` (5,000 ev/s → ≤ 10 Hz, true max 89 °C kept); red phase documented in `walkthrough-impl2.md` §2. **Not covered:** the PRD's polling fallback | CI-7 | PASS (fallback not tested) |
+| FR-05b | Storm over the WebSocket pipeline: 5,000 ev/s still decimated to 4 Hz, `Storm Mode Active` indicator | 11.4 | Planned: WS storm test (same owner). HTTP-path storm is already PASS under 11.1 | none | PENDING (the WS test asserts ≤ 10 Hz, not the PRD 4 Hz bucket nor the `Storm Mode Active` indicator) |
+| NFR-01b | Load injector script benchmarking the WebSocket ingestion pipeline, ≥ 5,000 ev/s for ≥ 15 min (PRD NFR-01 verification method) | 11.5 | Planned: k6 script (path to be set by the 11.5 owner, e.g. `k6/storm.js`) with thresholds | none | PENDING (`tests/nfr/composite-alert-load.js` exists but targets composite alerts, not the 15-min ingestion benchmark; k6 not installed here, no run recorded) |
+| NFR-05b | Heap ≤ 128 MB during the 15–60 min storm, measured under load | 11.5 | Planned: k6 run + `process.memoryUsage()` / heap snapshot evidence (N-05) | none | PENDING (no heap measurement under load recorded) |
+| FR-06-AD28 | Composite incident correlation: thermal > 85 °C + fan 0 RPM + dropped tokens on one node within 30 s collapse into one `CRITICAL_COOLING_FAILURE` incident, duplicates suppressed (AD-28) | 11.5 | `test/integration/story_11_5_composite_alerts.test.ts`; k6 script `tests/nfr/composite-alert-load.js` (results to be re-run, see walkthrough §3) | CI-7 | PASS (functional; k6 numbers unverified here) |
 | E2E-a | Heatmap web page `GET /observability/heatmap` renders the fleet (32 cells = 31 workstations + `server-gpu-01`; node above 88 °C highlighted) | 11.6 | `tests/e2e/heatmap-triage.spec.ts` › "shows the whole fleet and highlights only the node above 88°C" via `tests/e2e/pages/ObservabilityDashboardPage.ts`; route in `src/adapters/inbound/observability-ui.ts`; `test/harness/cordon.test.ts` › "serves the heatmap page and its assets" | CI-6 | PASS |
 | E2E-b | Flow E variant: *silent* `ws-gpu-22` (SILENT_TIMEOUT) forensic drill-down (timeline, last job `job-cs480-lora-run-84`, "Cordon Recommended") | 11.6 | Not covered. The Annex BDD for 11.6 is the **thermal alert (> 88 °C)** drill-down (telemetry graph + error logs), which E2E-c covers. The drawer does not call `/v1/nodes/:id/forensics`, which only answers for non-HEALTHY nodes | none | PENDING (out of the Annex scenario; decide with the team whether it is required) |
 | E2E-c | Annex BDD 11.6: click hot cell `ws-gpu-22` → slide-out drawer with live telemetry graph and recent error logs → "Cordon Node from Cluster" → cell Gray + `CORDONED` lock badge → audit event in the activity feed (visual cordon only, PRD §5 non-goal 3) | 11.6 | `tests/e2e/heatmap-triage.spec.ts` › "Engineer drills down into thermal alert and cordons node" and "Escape closes the drawer and the cordoned state survives a reload"; backend: `test/harness/cordon.test.ts` (idempotency, 20-way concurrent cordon → 1 event, unknown node → 404, audit feed) | CI-5, CI-6 | PASS |
@@ -73,13 +75,13 @@ Test-file paths (all verified to exist): `test/atdd/observability_contracts.test
 
 | Metric | Count |
 |---|:-:|
-| Requirement rows in this matrix (11.1–11.6 chain + supplementary Ops) | **25** |
+| Requirement rows in this matrix (11.1–11.6 chain + supplementary Ops) | **26** |
 | Unmapped requirements | **0** |
-| PASS | **17** |
-| PENDING | **8** |
+| PASS | **19** |
+| PENDING | **7** |
 | Failed / FAIL | 0 |
 
-Breakdown by story: 11.1 → 6 PASS · 11.2 → 3 PASS (FR-01c, FR-01d, NFR-04), 1 PENDING (NFR-02) · 11.3 → 2 PASS + NFR-03 PASS (3 total), 1 PENDING (FR-02c banner) · 11.4 → 2 PENDING · 11.5 → 2 PENDING · 11.6 → 2 PASS (E2E-a, E2E-c), 2 PENDING (E2E-b, NFR-07) · supplementary Ops 3/4 (FR-03a, FR-04, NFR-06) → 3 PASS.
+Breakdown by story: 11.1 → 6 PASS · 11.2 → 3 PASS (FR-01c, FR-01d, NFR-04), 1 PENDING (NFR-02) · 11.3 → 2 PASS + NFR-03 PASS (3 total), 1 PENDING (FR-02c banner) · 11.4 → 1 PASS (FR-01e), 1 PENDING (FR-05b) · 11.5 → 1 PASS (FR-06-AD28), 2 PENDING (NFR-01b, NFR-05b) · 11.6 → 2 PASS (E2E-a, E2E-c), 2 PENDING (E2E-b, NFR-07) · supplementary Ops 3/4 (FR-03a, FR-04, NFR-06) → 3 PASS.
 
 PRD requirement coverage (FR-01..05, NFR-01..08, all 13): each appears at least once above (FR-01 a–e, FR-02 a–c, FR-03, FR-04, FR-05 a–b, NFR-01 a–b, NFR-02 … NFR-08). Fully PASS today: FR-03 (backend), FR-04, NFR-03 (logical), NFR-04, NFR-06 (functional), NFR-08. Partly PENDING: FR-01, FR-02, FR-05, NFR-01, NFR-05, NFR-02, NFR-07.
 

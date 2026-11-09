@@ -1,14 +1,91 @@
 # Implementation Walkthrough Report (Task Impl-2)
 
-**Module:** Module 11 — AI Infrastructure Observability Console
-**Branch of this section:** `feature/impl2-e2e-playwright` (Story 11.6 / Flow E)
-**Stack:** TypeScript / Node.js 22, `node:http`, SQLite, Vitest, Playwright 1.64.0 (Chromium)
-
-> **Authorship and completeness.** This report is built in two parts. **Story 11.6 (Flow E) and the traceability matrix are complete and carry real evidence below.** Stories **11.4 (Flow A, WebSocket)** and **11.5 (Flow D, k6)** live on the partner's branch `feature/impl2-backend-resilience`; their sections are marked `TODO(partner)` and must be filled from that branch's real terminal output. Nothing marked TODO is claimed as done.
+**Module:** Module 11 — AI Infrastructure Observability Console  
+**Project:** Academic AI Compute Fabric  
+**Phase:** Task Impl-2 (Advanced Implementation, Testing Alternatives & System Hardening)  
+**Authors:** Juan David Quintero & Juan Andrés Cano  
+**Status:** Stories 11.4, 11.5 and 11.6 merged on `main`; see §6 for the verified totals
 
 ---
 
-## 1. Architectural hardening summary (Story 11.6 scope)
+## 1. Executive Summary & Hardened System Architecture
+
+In Task Impl-2, Module 11 transitioned from basic foundational operations into a **mission-critical, hardened real-time observability platform**. 
+
+The system was fortified against high-concurrency race conditions, telemetry storms, and alert floods using the **BMad Testing Alternatives (The 5 Flows)**:
+- **Flow A (ATDD-First):** Story 11.4 followed strict Acceptance Test-Driven Development with a verified failing red phase before production code was introduced.
+- **Flow D (Quality Gate & NFR):** Story 11.5 enforced composite incident correlation to eliminate 30-second alert storms, backed by a k6 load test asserting $p_{95} < 50$ ms.
+- **Flow E (Playwright E2E):** Story 11.6 verified the interactive node drill-down and cordoning dashboard with zero flaky timeouts and visual forensic tracing.
+
+> **Verification note.** §2–§3 were authored by the partner on `feature/impl2-backend-resilience`. The k6 figures in §3 come from their run (k6 is not installed on the machine used for the merge): re-run `k6 run tests/nfr/composite-alert-load.js` and paste the raw output here before submitting. §4–§5 (Story 11.6) were produced and verified on `feature/impl2-e2e-playwright`.
+
+---
+
+## 2. Story 11.4: Telemetry Flood Ingestion Storm Throttling (Flow A: ATDD-First)
+
+### Business Goal & Technical Context
+* **Persona:** Real-Time Console Stream Handler.
+* **Problem:** Under a benchmarking storm of 5,000 events/second across 32 nodes, pushing raw events freezes client browser rendering threads and balloons server memory.
+* **Solution (Invariant AD-27):** A WebSocket stream handler on `/ws/telemetry` equipped with a token-bucket stream rate-limiter and a peak-preserving sliding window downsampler. Throttles client-bound frames to $\le 10$ Hz per node while strictly retaining true maximum temperature (e.g. 89°C) and peak VRAM.
+
+### Authentic Red-Phase ATDD Evidence
+Prior to writing production code, the test suite `test/atdd/story_11_4_ws_storm.test.ts` was executed to witness an authentic red failure:
+
+```text
+ RUN  v1.6.1 C:/Universidad/Noveno Semestre/Desarrollo con IA/Impl 1
+
+ ❯ test/atdd/story_11_4_ws_storm.test.ts  (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/atdd/story_11_4_ws_storm.test.ts [ test/atdd/story_11_4_ws_storm.test.ts ]
+Error: Failed to load url ../../src/adapters/inbound/websocket-server. Does the file exist?
+```
+
+### Production Implementation
+* **Domain Service:** `src/domain/services/stream-downsampler.ts` — Pure sliding window aggregator tracking `maxTemp`, `maxVram`, and running averages, harvesting at 100 ms intervals (10 Hz).
+* **Inbound Adapter:** `src/adapters/inbound/websocket-server.ts` — Native Node.js `ws` server broadcasting downsampled frames.
+
+### Green-Phase Verification
+```text
+ ✓ test/atdd/story_11_4_ws_storm.test.ts  (1 test) 1123ms
+   ✓ throttles a 5,000 events/sec storm to <= 10 Hz without dropping peak temperature (89°C)
+```
+
+---
+
+## 3. Story 11.5: Multi-Metric Composite Alert Correlation Engine (Flow D: NFR & Quality Gate)
+
+### Business Goal & Technical Context
+* **Persona:** Cluster Observability Engine.
+* **Problem:** When cooling fails on a workstation, operators receive an alert storm of 30+ disconnected alerts (temperature spike, fan tachometer drop, dropped tokens, inference timeouts).
+* **Solution (Invariant AD-28):** Multi-metric sliding window correlation engine. Any co-occurrence of:
+  - Thermal spike ($>85^\circ\text{C}$)
+  - Fan failure ($0$ RPM)
+  - Dropped token heartbeats ($>0$)
+  within a 30-second window on the same node collapses into exactly **one composite incident**: `CRITICAL_COOLING_FAILURE`. All subsequent related alerts on that node are suppressed.
+
+### Implementation & Verification
+* **Domain Service:** `src/domain/services/composite-incident-correlator.ts`.
+* **Integration Test:** `test/integration/story_11_5_composite_alerts.test.ts`:
+```text
+ ✓ test/integration/story_11_5_composite_alerts.test.ts  (1 test) 2ms
+   ✓ correlates thermal spike >85C, fan 0 RPM, and dropped tokens into a single CRITICAL_COOLING_FAILURE incident
+```
+
+### k6 Non-Functional Requirement (NFR) Load Test Summary
+Script: `tests/nfr/composite-alert-load.js` simulating 50 concurrent virtual users submitting burst telemetry:
+
+| Metric | Target SLA | Measured Result | Status |
+|---|:---:|:---:|:---:|
+| **$p_{95}$ Latency** | $< 50\text{ ms}$ | **$14.2\text{ ms}$** | **PASS** |
+| **$p_{99}$ Latency** | $< 100\text{ ms}$ | **$28.6\text{ ms}$** | **PASS** |
+| **Error Rate** | $< 1.0\%$ | **$0.00\%$** | **PASS** |
+| **Unhandled HTTP 500s** | $0$ | **$0$** | **PASS** |
+
+---
+
+## 4. Story 11.6 — hardening summary (Flow E scope)
 
 | Concern | What was done | Where |
 |---|---|---|
@@ -24,7 +101,7 @@
 
 Known limits, stated plainly: cordon state is **in memory** (lost on restart; the PRD treats cordon as visual only); the server clock is the existing `FakeClock`, so feed timestamps do not advance.
 
-## 2. Story 11.6 — Interactive Node Drill-Down & Incident Triage Timeline E2E (Flow E)
+## 5. Story 11.6 — Interactive Node Drill-Down & Incident Triage Timeline E2E (Flow E)
 
 **Technical challenge.** Deliver a browser flow (hot cell → drawer → cordon → audit feed) that is verified through the real UI with zero timing hacks, while keeping the E2E layer thin so the test pyramid is not inverted.
 
@@ -93,25 +170,21 @@ Full gate (`npm run ci`): typecheck OK · harness 5 files / 145 tests · ATDD 15
 - Open with `npx playwright show-trace <path>/trace.zip` to see DOM snapshots, the drawer slide-out and the cordon button click.
 - **TODO(team):** CI does not exist in this repo (no `.github/`). To meet "trace.zip captured on CI", copy `test/ci/quality-gate.yml` to `.github/workflows/`, add `npx playwright test` and upload `test-results/` as an artifact on failure.
 
-## 3. Story 11.4 — Telemetry Flood Throttling & Client-Side Downsampling (Flow A: ATDD-first)
 
-`TODO(partner)` — owner: partner branch `feature/impl2-backend-resilience`. Fill with: technical challenge (5,000 ev/s → ≤ 10 Hz, peaks preserved, AD-27), code implemented (token bucket + peak-preserving downsampler, `/ws/telemetry`), and terminal evidence.
+## 6. Multi-layer test execution summary
 
-## 4. Story 11.5 — Multi-Metric Composite Alert Correlation (Flow D: Quality Gate)
+Verified on `main` after merging `feature/impl2-e2e-playwright` and `feature/impl2-backend-resilience` (`npm run ci` + `npm run test:e2e`):
 
-`TODO(partner)` — fill with: challenge (4 simultaneous anomalies on `ws-gpu-15` → exactly 1 `CRITICAL_COOLING_FAILURE` incident, AD-28), correlator design, integration test output, concurrency evidence.
+```text
+Vitest harness config : 6 files, 148 tests   (fixtures 36, schema 35, scaffold 8, cordon 16, purity 52, integration/story_11_5 1)
+Vitest ATDD config    : 2 files, 158 tests   (157 contracts + story_11_4_ws_storm 1)
+Playwright (Flow E)   : 1 spec,   3 tests    (3 passed, 5.6 s)
+typecheck / trace:check / readiness:check : OK
+```
 
-## 5. Red-phase ATDD evidence
+Merge notes: (1) the partner's `ConsoleUiDispatch.dispatch` iterated `snapshot.nodes`, which does not exist on `FleetSnapshotDTO` (it has `cells`), breaking `tsc` and `docker build`; fixed to read `snapshot.cells`. (2) `test/integration/` was not in any Vitest config, so the Story 11.5 test never ran under `npm run ci`; added to the harness include list. The earlier "285 tests" figure therefore did not include it.
 
-`TODO(partner)` — paste the terminal output of the **failing** run for the Flow A story (11.4) captured **before** the production code exists (e.g. `npx vitest run <file>` failing with the missing implementation), plus the later green run. Story 11.6 was not driven by a Flow A red phase; its break-test is documented in section 2.
-
-## 6. k6 load test summary
-
-`TODO(partner)` — table to fill from the real `k6 run` output:
-
-| Script | Scenario | p95 | p99 | Error rate | Budget | Verdict |
-|---|---|---|---|---|---|---|
-| `TODO` | `TODO` | `TODO` | `TODO` | `TODO` | `TODO` | `TODO` |
+---
 
 ## 7. Traceability
 
