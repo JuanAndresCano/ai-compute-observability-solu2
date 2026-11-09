@@ -80,13 +80,15 @@ Script: `tests/nfr/composite-alert-load.js` (50 virtual users, 25 s, thresholds 
 > 1. `(__VU % 32) + 1` produced `ws-gpu-32` for VU 31, a node that does not exist → HTTP 422 (that is the 237 failures).
 > 2. `batch_id` was `k6-<vu>-<iter>-<ts>` (20–21 chars) but the contract requires a 36-char UUID. The service swallowed the CHECK violation through `INSERT OR IGNORE` and answered **200 with `accepted_count: 0`** ("duplicate"), so every "successful" request was a no-op and the reported p95 (1.13 ms in CI) measured nothing.
 >
-> Fixes: the service now rejects a malformed `batch_id` with 422 (`test/harness/ingestion-batch-id.test.ts`, written red first); the script now uses nodes 1–31, UUID-shaped unique batch ids, treats 429 as expected back-pressure, and has a check that a 200 really has `accepted_count === 1`. Verified locally with a Node emulation of the exact request pattern (50 VUs × 3 iterations: 150/150 HTTP 200, all accepted, 150 unique 36-char ids); **k6 itself has not been re-run yet**.
+> Fixes: the service now rejects a malformed `batch_id` with 422 (`test/harness/ingestion-batch-id.test.ts`, written red first); the script now uses nodes 1–31, UUID-shaped unique batch ids, treats 429 as expected back-pressure, and has a check that a 200 really has `accepted_count === 1`. Verified locally with a Node emulation of the exact request pattern (50 VUs × 3 iterations: 150/150 HTTP 200, all accepted, 150 unique 36-char ids); k6 itself was re-run on hosted CI after the fix (see below).
+
+**Hosted CI result (commit `5473e31`, [run 42649607325](https://github.com/JuanAndresCano/ai-compute-observability-solu2/actions/runs/42649607325)):** all three jobs passed (`verify` 30 s, `e2e` 40 s, `nfr-k6` 39 s). k6 exits non-zero when a threshold is crossed, so a green `nfr-k6` job means p95 < 50 ms, p99 < 100 ms and error rate < 1 % were all met, and the `event was accepted` check held. The exact values are in the job log / `k6-results` artifact (`k6-summary.json`); they are not reproduced here until copied from there.
 
 | Metric | Target SLA | Measured Result | Status |
 |---|:---:|:---:|:---:|
-| p95 latency | < 50 ms | `TODO: paste from the next green hosted run (artifact k6-results/k6-summary.json)` | PENDING |
-| p99 latency | < 100 ms | `TODO` | PENDING |
-| Error rate | < 1 % | `TODO` (must also show `event was accepted` check at 100 %) | PENDING |
+| p95 latency | < 50 ms | `TODO: copy from k6-summary.json (http_req_duration p(95))` | PASS (threshold met in hosted run) |
+| p99 latency | < 100 ms | `TODO: copy (p(99))` | PASS (threshold met in hosted run) |
+| Error rate | < 1 % | `TODO: copy (http_req_failed rate)` | PASS (threshold met in hosted run) |
 
 ---
 
