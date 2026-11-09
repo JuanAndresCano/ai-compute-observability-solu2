@@ -145,6 +145,8 @@ This log documents **7 significant AI interactions**, featuring **4 explicit hum
 | 9 | Trace mode `on-first-retry` vs `retain-on-failure` | Spec text corrected AI's plan |
 | 10 | Merge of the partner's branch | AI re-ran the gate; found a type error and a never-run test |
 | 11 | Branch coverage 83.87 % → 90.47 % | Test execution caught 2 AI test mistakes |
+| 12 | axe-core accessibility audit | Automated check caught an AI UI defect |
+| 13 | Hosted CI k6 failure | Human ran CI and pasted it; AI found the vacuous test and a silent-discard bug |
 
 ### Interaction 1 — Wrong PDF treated as the Impl-2 statement
 * **Prompt:** "Review the repo and the attached PDF with the context for Impl-2; implement Story 11.6 (pages 30–32)."
@@ -203,7 +205,20 @@ This log documents **7 significant AI interactions**, featuring **4 explicit hum
   2. *Impossible fixture.* The AI planned to corrupt `log_tail_json` to exercise the 503 path; SQLite's CHECK constraint (`json_valid(...)`) rejected the write, proving the schema already prevents that corruption. The test was replaced by an injected repository failure at the port.
 * **Why it matters:** both mistakes would have produced a misleading test (one asserting behaviour the system does not have, one testing a state that cannot exist).
 
+### Interaction 12 — axe-core finds a real accessibility defect in AI-written UI
+* **AI proposal:** add `@axe-core/playwright` through the Page Object (`expectNoAccessibilityViolations`) and audit the heatmap, the open drawer and the CORDONED state.
+* **What happened:** the first run failed with `label-content-name-mismatch` (WCAG 2.5.3) on all 32 cells: the AI-generated `aria-label` ("62 degrees Celsius") did not contain the visible text ("62°C"). Colour contrast passed.
+* **Resolution:** removed the redundant `aria-label` so the accessible name is the visible text; did not disable the rule or exclude the cells.
+* **Classification:** AI UI defect caught by an automated check, not by a human reviewer.
+
+### Interaction 13 — Hosted CI exposed a vacuous load test (human pasted the failing run)
+* **Trigger (human):** after the push, the human ran the workflow on GitHub and pasted the failing `k6` job (`http_req_failed` 1.73 %, p95 = 1.13 ms).
+* **AI analysis:** reproduced locally with `curl`: VU 31 maps to `ws-gpu-32` (HTTP 422 → the 237 failures), and, more importantly, every request used a 20-char `batch_id` against a `CHECK (length = 36)` guarded by `INSERT OR IGNORE`, so the service answered 200 with `accepted_count: 0` ("duplicate"). The earlier reported "p95 14.2 ms, 0 % errors" came from the same script and measured a no-op.
+* **Fix, test first:** wrote `test/harness/ingestion-batch-id.test.ts` and watched it fail (malformed ids returned `accepted_count 0`, the empty id skipped idempotency entirely), then added 422 validation in the ingestion service. The k6 script now sends valid ids and nodes 1–31, treats 429 as expected, and asserts `accepted_count === 1` so it cannot be green while doing nothing. All 363 Vitest tests still pass.
+* **Limits stated:** k6 itself was not re-run (the AI was denied permission to download and execute the k6 binary and did not work around it); the request pattern was verified with a Node emulation: 150/150 HTTP 200, all accepted.
+* **Classification:** the "Blindly Green / vacuous assertion" trap in a test the AI had *accepted* from the partner's branch: the AI repeated the 14.2 ms figure in the merged walkthrough without having run k6. That unverified number has been withdrawn.
+
 ## Impl-2 governance summary (this branch)
-* Interactions logged: **11** (≥ 8 required for the whole team; partner entries still to be appended).
-* Human-steered decisions: 1, 2, 4, 5. AI-flagged / test-caught issues: 3, 6, 7, 8, 9, 10, 11.
+* Interactions logged: **13** (≥ 8 required for the whole team; partner entries still to be appended).
+* Human-steered decisions: 1, 2, 4, 5. AI-flagged / test-caught issues: 3, 6, 7, 8, 9, 10, 11, 12. Human-triggered: 13 (CI run pasted by the human).
 * **Open item `TODO(team)`:** record at least 2 genuine human corrections of AI-written tests (e.g. an over-mocked test or a rejected `sleep`) from the partner's Stories 11.4/11.5 or from review of this branch, with the exact before/after.

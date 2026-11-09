@@ -84,7 +84,7 @@
       tag.removeAttribute('data-testid');
       tag.textContent = TAGS[s];
     }
-    btn.setAttribute('aria-label', `${row.node_id}, ${noData ? 'no data' : Math.round(row.temperature_celsius) + ' degrees Celsius'}, ${TAGS[s].toLowerCase()}`);
+    // No aria-label: the accessible name is the visible text (node id, temperature, state), satisfying WCAG 2.5.3 Label in Name.
   }
 
   function renderSummary() {

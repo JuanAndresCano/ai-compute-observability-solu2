@@ -77,6 +77,12 @@ export class TelemetryIngestionService implements TelemetryIngestionPort {
       throw this.contractError('ERR_INVALID_TELEMETRY_PAYLOAD', 422, false, 'Invalid events array length (must be 1..5000)');
     }
 
+    // The ingested_batches table enforces length(batch_id) = 36 and INSERT OR IGNORE would swallow a violation as a
+    // "duplicate", silently discarding the events. Refuse a malformed id loudly instead.
+    if (batch.batch_id !== undefined && (typeof batch.batch_id !== 'string' || batch.batch_id.length !== 36)) {
+      throw this.contractError('ERR_INVALID_TELEMETRY_PAYLOAD', 422, false, 'batch_id must be a 36-character UUID');
+    }
+
     for (let i = 0; i < batch.events.length; i++) {
       const ev = batch.events[i]!;
       if (!ev || !NODE_ID_REGEX.test(ev.node_id)) {

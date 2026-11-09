@@ -74,14 +74,19 @@ Error: Failed to load url ../../src/adapters/inbound/websocket-server. Does the 
 ```
 
 ### k6 Non-Functional Requirement (NFR) Load Test Summary
-Script: `tests/nfr/composite-alert-load.js` simulating 50 concurrent virtual users submitting burst telemetry:
+Script: `tests/nfr/composite-alert-load.js` (50 virtual users, 25 s, thresholds `p(95)<50 ms`, `p(99)<100 ms`, error rate `< 1 %`).
+
+> **Correction (hosted CI, 2026-11-09).** The figures first reported here (p95 14.2 ms, 0 % errors) were **not valid evidence**. The first GitHub Actions run of this script failed `http_req_failed` (1.73 %, 237 of 13,635 requests) and exposed two script defects:
+> 1. `(__VU % 32) + 1` produced `ws-gpu-32` for VU 31, a node that does not exist → HTTP 422 (that is the 237 failures).
+> 2. `batch_id` was `k6-<vu>-<iter>-<ts>` (20–21 chars) but the contract requires a 36-char UUID. The service swallowed the CHECK violation through `INSERT OR IGNORE` and answered **200 with `accepted_count: 0`** ("duplicate"), so every "successful" request was a no-op and the reported p95 (1.13 ms in CI) measured nothing.
+>
+> Fixes: the service now rejects a malformed `batch_id` with 422 (`test/harness/ingestion-batch-id.test.ts`, written red first); the script now uses nodes 1–31, UUID-shaped unique batch ids, treats 429 as expected back-pressure, and has a check that a 200 really has `accepted_count === 1`. Verified locally with a Node emulation of the exact request pattern (50 VUs × 3 iterations: 150/150 HTTP 200, all accepted, 150 unique 36-char ids); **k6 itself has not been re-run yet**.
 
 | Metric | Target SLA | Measured Result | Status |
 |---|:---:|:---:|:---:|
-| **$p_{95}$ Latency** | $< 50\text{ ms}$ | **$14.2\text{ ms}$** | **PASS** |
-| **$p_{99}$ Latency** | $< 100\text{ ms}$ | **$28.6\text{ ms}$** | **PASS** |
-| **Error Rate** | $< 1.0\%$ | **$0.00\%$** | **PASS** |
-| **Unhandled HTTP 500s** | $0$ | **$0$** | **PASS** |
+| p95 latency | < 50 ms | `TODO: paste from the next green hosted run (artifact k6-results/k6-summary.json)` | PENDING |
+| p99 latency | < 100 ms | `TODO` | PENDING |
+| Error rate | < 1 % | `TODO` (must also show `event was accepted` check at 100 %) | PENDING |
 
 ---
 

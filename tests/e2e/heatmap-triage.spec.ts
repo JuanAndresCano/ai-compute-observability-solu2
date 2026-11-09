@@ -68,6 +68,8 @@ test.describe('Fleet Thermal Heatmap: node drill-down and incident triage', () =
     await dashboard.expectActivityEntry(`Node ${HOT_NODE} cordoned by liam`);
     await expect(dashboard.cordonedCount).toHaveText('1 cordoned');
     await expect(dashboard.cordonButton).toBeDisabled();
+    // The gray CORDONED state with its lock icon must also meet WCAG 2.1 AA (contrast, names)
+    await dashboard.expectNoAccessibilityViolations();
   });
 
   test('Escape closes the drawer and the cordoned state survives a reload', async ({ page }) => {

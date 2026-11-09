@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
@@ -57,6 +58,22 @@ export class ObservabilityDashboardPage {
     await this.cell(nodeId).click();
   }
 
+  async focusCell(nodeId: string): Promise<void> {
+    await this.cell(nodeId).focus();
+  }
+
+  async pressEnter(): Promise<void> {
+    await this.page.keyboard.press('Enter');
+  }
+
+  async expectCloseButtonFocused(): Promise<void> {
+    await expect(this.closeButton).toBeFocused();
+  }
+
+  async expectCellFocused(nodeId: string): Promise<void> {
+    await expect(this.cell(nodeId)).toBeFocused();
+  }
+
   async closeDrawerWithEscape(): Promise<void> {
     await this.page.keyboard.press('Escape');
   }
@@ -106,5 +123,12 @@ export class ObservabilityDashboardPage {
 
   async expectActivityEntry(text: string | RegExp): Promise<void> {
     await expect(this.activityItems.filter({ hasText: text })).toHaveCount(1);
+  }
+
+  /** WCAG 2.0/2.1 A + AA automated audit of the current view (grid, open drawer, activity feed). Fails with the rule ids and offending nodes. */
+  async expectNoAccessibilityViolations(): Promise<void> {
+    const { violations } = await new AxeBuilder({ page: this.page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+    const summary = violations.map((v) => `${v.id} (${v.impact}): ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`);
+    expect(summary, 'axe violations').toEqual([]);
   }
 }
