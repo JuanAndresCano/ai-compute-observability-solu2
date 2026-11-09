@@ -121,3 +121,74 @@ This log documents **7 significant AI interactions**, featuring **4 explicit hum
 | Critical Human Corrections | $\ge 2$ | **4** | **EXCEEDED** |
 | Layer Boundary Violations Caught & Corrected | - | **2** | **VERIFIED** |
 | Contract / Schema Drift Instances Corrected | - | **2** | **VERIFIED** |
+
+---
+---
+
+# AI Decision Log — Task Impl-2 (Story 11.6 / Flow E and traceability)
+
+**Scope of this section:** AI interactions on branch `feature/impl2-e2e-playwright` (Story 11.6 Playwright E2E, cordon endpoint, traceability matrix). Partner interactions for Stories 11.4 and 11.5 belong in a section appended from `feature/impl2-backend-resilience` (`TODO(partner)`).
+**Agent:** Claude Code (Sonnet 5.5). **Human lead for this section:** J. A. Cano.
+
+**Honesty note on the "≥ 2 corrected AI testing mistakes" requirement.** Entries below are tagged by *who* caught the problem. Entry 6 is a testing defect caught by the suite itself, **not** by a human reviewer. Entry 2 and entry 5 are human steering. Two human corrections of AI testing mistakes must be recorded by the team from actual reviews (`TODO(team)`): this log does not invent them.
+
+| # | Topic | Caught / decided by |
+|---|---|---|
+| 1 | Wrong source document | AI flagged, human supplied the Annex |
+| 2 | Delegating the matrix | Human decision, AI constraints |
+| 3 | Playwright version pin | AI, verified by command |
+| 4 | Adapter separation to avoid merge conflicts | Human constraint, AI design |
+| 5 | Thermal threshold 88 °C | Human decision |
+| 6 | Flat-line chart rejected by Playwright | **Test suite** (AI-generated assertion and UI defect) |
+| 7 | `pkill` killed the shell, files silently not written | AI, via `git status` |
+| 8 | Proving the spec is not "blindly green" | AI-proposed, evidence in walkthrough |
+| 9 | Trace mode `on-first-retry` vs `retain-on-failure` | Spec text corrected AI's plan |
+
+### Interaction 1 — Wrong PDF treated as the Impl-2 statement
+* **Prompt:** "Review the repo and the attached PDF with the context for Impl-2; implement Story 11.6 (pages 30–32)."
+* **AI action:** Extracted the PDF in `last_dance/`. It has 7 image-only pages (the Impl-1 delivery deck, 282/282 tests), not 32; OCR confirmed it. The AI said so and did **not** invent the BDD scenario.
+* **Human steering:** Pasted the real Impl-2 text, including the Annex scenario for Story 11.6 (`ws-gpu-22` > 88 °C, drawer, cordon, activity feed).
+* **Outcome:** Implementation matched the actual acceptance criteria, including the "audit event in the activity feed" clause that the first plan had not covered.
+
+### Interaction 2 — Delegating the traceability matrix to a subagent
+* **Decision (human):** Split the work; the matrix runs in parallel to the UI.
+* **AI constraints set in the prompt:** PASS only where a test exists and passed in a real run; `PENDING` for 11.4/11.5/11.6 until evidence exists; verify every cited path.
+* **Result:** 25 requirements, 15 PASS / 10 PENDING, plus 9 documented discrepancies (story numbering, colour bands 65/80/88 vs 75/85, no web UI, cordon only a recommendation, etc.).
+* **Human-led follow-up:** After implementing 11.6 the matrix rows E2E-a and E2E-c were changed to PASS only with the real run IDs (CI-5, CI-6); E2E-b (silent-node forensic variant) was left PENDING because the Annex scenario is the thermal one.
+
+### Interaction 3 — Pinning Playwright to the already-installed browser
+* **AI action:** `@playwright/test@latest` (1.65.0) wants Chromium build 1254; the machine cache has 1248. The AI probed versions with `playwright install --dry-run` and pinned `1.64.0` (build 1248), avoiding a ~150 MB download and version drift (`--save-exact`).
+
+### Interaction 4 — Isolating the UI in its own inbound adapter
+* **Human constraint:** The partner edits `http-server.ts` (WebSocket, k6).
+* **AI design:** Put the view and triage routes in `src/adapters/inbound/observability-ui.ts`; `http-server.ts` gets a 2-line delegation. Cordon logic lives behind `CordonPort` / `NodeCordonService`, so `purity.test.ts` stays green.
+* **Why it matters:** minimal merge-conflict surface; hexagonal boundary preserved.
+
+### Interaction 5 — Threshold: 88 °C vs the repo's 85 °C band
+* **Conflict:** The Annex and the human say alert > 88 °C; the existing heatmap DTO marks `CRITICAL` from 85 °C; the PRD says red ≥ 88 °C.
+* **Human decision:** use 88 °C, strictly greater.
+* **AI implementation:** the constant lives in the view only; the Impl-1 contract (`temperature_band`) was **not** modified, so no ATDD test changes. The mismatch is recorded in the matrix as gap G-6.
+
+### Interaction 6 — Playwright rejects a zero-height polyline (test caught an AI defect)
+* **AI proposal:** the drawer chart as a single SVG `polyline`, asserted with `toBeVisible()`.
+* **What happened:** the first run failed: with a constant temperature (all samples 91 °C) the polyline's bounding box has height 0, so Playwright treats it as hidden (`unexpected value "hidden"`).
+* **Resolution:** the AI fixed the **product**, not the assertion: added a filled `polygon.area` under the curve (a real visual improvement), and made the Page Object also assert `data-points` ≥ 1. It explicitly did **not** weaken the check to `toBeAttached()` or add a wait.
+* **Classification:** a real defect found by an auto-retrying web-first assertion. Not a human correction.
+
+### Interaction 7 — A shell command killed the session; files were never written
+* **What happened:** a `pkill -f "dist/src/server.js"` matched its own command line and terminated the shell (exit 144) before the next `cat > file` blocks ran. The AI noticed through `git status` / `ls` that `tests/e2e/*.ts` did not exist, recreated them with the file-writing tool, and stopped using pattern-based `pkill`.
+* **Lesson:** verify that a step's outputs exist before moving on; never trust a command chain after an abnormal exit.
+
+### Interaction 8 — Proving the E2E spec can fail ("Blindly Green" trap)
+* **AI proposal:** temporarily set `THERMAL_ALERT_C` from 88 to 95 and run with `CI=1` (retries=1).
+* **Evidence:** test 1 failed with `Expected: "alert" / Received: "warm"`, test 2 and 3 skipped (serial mode), retry #1 failed identically, and a `trace.zip` was written for the retry. The change was reverted (`git checkout`), the suite is green again (3/3). See walkthrough §2.
+* **Also done:** assertions check concrete values (`91°C`, exactly one feed entry, `1 cordoned`, disabled button), not just visibility.
+
+### Interaction 9 — Trace configuration aligned with the statement
+* **AI first plan:** `trace: 'retain-on-failure'` (suggested by the teammate's brief).
+* **Correction from the statement:** the Impl-2 text requires `trace: 'on-first-retry'`. The config was set accordingly with `retries: 1` under `CI`, and both modes were exercised (full-pass `--trace=on` and the failing retry above).
+
+## Impl-2 governance summary (this branch)
+* Interactions logged: **9** (≥ 8 required for the whole team; partner entries still to be appended).
+* Human-steered decisions: 1, 2, 4, 5. AI-flagged / test-caught issues: 3, 6, 7, 8, 9.
+* **Open item `TODO(team)`:** record at least 2 genuine human corrections of AI-written tests (e.g. an over-mocked test or a rejected `sleep`) from the partner's Stories 11.4/11.5 or from review of this branch, with the exact before/after.

@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-26-2026 12:00
-last_updated: 11-08-2026 19:30
+last_updated: 11-09-2026 12:00
 project: Module 11 - AI Infrastructure Observability Console
 project_key: NOKEY
 tracking_system: file-system
@@ -62,3 +62,9 @@ development_status:
   4-2-management-gets-an-honest-empty-state-and-clear-refusals: done
   4-3-everything-runs-offline-and-the-accessibility-audit-passes: done
   epic-4-retrospective: done
+
+  # ---- Impl-2 (Module 11 stories 11.4 - 11.6). Numbering follows the Impl-2 Annex, not epics.md. ----
+  epic-11-impl2: in-progress
+  11-4-telemetry-flood-throttling-and-client-side-downsampling: in-progress   # partner, branch feature/impl2-backend-resilience; verify before submitting
+  11-5-multi-metric-composite-alert-correlation-engine: in-progress           # partner, same branch; verify before submitting
+  11-6-interactive-node-drill-down-and-incident-triage-timeline-e2e: review   # feature/impl2-e2e-playwright: 3/3 E2E + 16 unit/integration + CI green
