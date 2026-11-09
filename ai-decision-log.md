@@ -147,6 +147,7 @@ This log documents **7 significant AI interactions**, featuring **4 explicit hum
 | 11 | Branch coverage 83.87 % → 90.47 % | Test execution caught 2 AI test mistakes |
 | 12 | axe-core accessibility audit | Automated check caught an AI UI defect |
 | 13 | Hosted CI k6 failure | Human ran CI and pasted it; AI found the vacuous test and a silent-discard bug |
+| 14 | 11.4 test: hardcoded sleep + vacuous ≤ 10 assertion | AI audit; human approved the fix; mutation-checked |
 
 ### Interaction 1 — Wrong PDF treated as the Impl-2 statement
 * **Prompt:** "Review the repo and the attached PDF with the context for Impl-2; implement Story 11.6 (pages 30–32)."
@@ -218,7 +219,15 @@ This log documents **7 significant AI interactions**, featuring **4 explicit hum
 * **Limits stated:** the AI could not run k6 locally (permission to download and execute the binary was denied and it did not work around it); it verified the request pattern with a Node emulation (150/150 HTTP 200, all accepted). **Outcome:** the human then pushed and the hosted `nfr-k6` job passed with the corrected script (run 42649607325), so the fix is confirmed by real k6, not only by the emulation.
 * **Classification:** the "Blindly Green / vacuous assertion" trap in a test the AI had *accepted* from the partner's branch: the AI repeated the 14.2 ms figure in the merged walkthrough without having run k6. That unverified number has been withdrawn.
 
+### Interaction 14 — Two testing mistakes corrected in the Story 11.4 test (Flaky Sleeper and vacuous assertion)
+* **Provenance (to confirm):** the test lives on the partner's branch (`b92578e`). Whether an AI wrote it is `TODO(partner): confirm`; this entry does not claim it. What is certain is that it was merged into `main` with both defects and passed CI.
+* **Detection:** found during an audit of the merged tree by the AI (Claude Code) while preparing the evidence for this log: (a) `await new Promise(r => setTimeout(r, 1100))`, a hardcoded sleep, which the rubric forbids; (b) the throttling assertion `frames.length ≤ 10` was satisfied by a single frame, because all 5,000 events were emitted in one synchronous burst, so the test proved peak preservation but not throttling (the "Blindly Green" trap).
+* **Human decision:** J. A. Cano reviewed the finding (matrix G-13) and instructed the correction on 2026-11-09.
+* **Correction (before → after):** the sleep was removed and the test now (1) sustains the storm (5,000-event burst, then 500 events after each received frame ≈ 5,000 ev/s), (2) ends when the frame timestamps span 1 s (data-driven; vitest's timeout is the only guard), (3) asserts at most 10 frames in every half-open 1 s window, at least 5 frames, more than 100 raw events per frame, the exact 89 °C peak on `ws-gpu-15` and no invented value above 74 °C elsewhere.
+* **Proof the new test can fail:** with the flush timer at 1 ms and an unthrottled downsampler it fails (`expected 695 to be less than or equal to 10`); reverted, it passes 3 / 3 (~1.1 s).
+* **Counts as two corrected testing mistakes** (a: timing hack; b: vacuous assertion) found in one test; the human-side confirmation of authorship by the partner is still open.
+
 ## Impl-2 governance summary (this branch)
-* Interactions logged: **13** (≥ 8 required for the whole team; partner entries still to be appended).
-* Human-steered decisions: 1, 2, 4, 5. AI-flagged / test-caught issues: 3, 6, 7, 8, 9, 10, 11, 12. Human-triggered: 13 (CI run pasted by the human).
+* Interactions logged: **14** (≥ 8 required for the whole team; partner entries still to be appended).
+* Human-steered decisions: 1, 2, 4, 5. AI-flagged / test-caught issues: 3, 6, 7, 8, 9, 10, 11, 12. Human-triggered: 13 (CI run pasted by the human), 14 (human approved the correction of A/B).
 * **Open item `TODO(team)`:** record at least 2 genuine human corrections of AI-written tests (e.g. an over-mocked test or a rejected `sleep`) from the partner's Stories 11.4/11.5 or from review of this branch, with the exact before/after.

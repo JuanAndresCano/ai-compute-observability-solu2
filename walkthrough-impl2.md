@@ -82,13 +82,17 @@ Script: `tests/nfr/composite-alert-load.js` (50 virtual users, 25 s, thresholds 
 >
 > Fixes: the service now rejects a malformed `batch_id` with 422 (`test/harness/ingestion-batch-id.test.ts`, written red first); the script now uses nodes 1–31, UUID-shaped unique batch ids, treats 429 as expected back-pressure, and has a check that a 200 really has `accepted_count === 1`. Verified locally with a Node emulation of the exact request pattern (50 VUs × 3 iterations: 150/150 HTTP 200, all accepted, 150 unique 36-char ids); k6 itself was re-run on hosted CI after the fix (see below).
 
-**Hosted CI result (commit `5473e31`, [run 42649607325](https://github.com/JuanAndresCano/ai-compute-observability-solu2/actions/runs/42649607325)):** all three jobs passed (`verify` 30 s, `e2e` 40 s, `nfr-k6` 39 s). k6 exits non-zero when a threshold is crossed, so a green `nfr-k6` job means p95 < 50 ms, p99 < 100 ms and error rate < 1 % were all met, and the `event was accepted` check held. The exact values are in the job log / `k6-results` artifact (`k6-summary.json`); they are not reproduced here until copied from there.
+**Hosted CI result (commit `5473e31`, [run 42649607325](https://github.com/JuanAndresCano/ai-compute-observability-solu2/actions/runs/42649607325), k6 v2.3.0 on `ubuntu-latest`):** all three jobs passed (`verify` 30 s, `e2e` 40 s, `nfr-k6` 39 s). Values copied from the job log:
 
 | Metric | Target SLA | Measured Result | Status |
 |---|:---:|:---:|:---:|
-| p95 latency | < 50 ms | `TODO: copy from k6-summary.json (http_req_duration p(95))` | PASS (threshold met in hosted run) |
-| p99 latency | < 100 ms | `TODO: copy (p(99))` | PASS (threshold met in hosted run) |
-| Error rate | < 1 % | `TODO: copy (http_req_failed rate)` | PASS (threshold met in hosted run) |
+| p95 latency (`http_req_duration`) | < 50 ms | **1.15 ms** | PASS |
+| p99 latency | < 100 ms | **1.78 ms** | PASS |
+| Error rate (`http_req_failed`) | < 1 % | **0.00 %** (0 of 13,620) | PASS |
+| Check `event was accepted` (200 ⇒ `accepted_count === 1`) | 100 % | **100 %** (40,860 / 40,860 checks) | PASS |
+| Throughput / VUs | n/a | 13,620 requests, 544 req/s, up to 49 of 50 VUs, 25 s | informational |
+
+Not exercised by this script: the `CompositeIncidentCorrelator` (see matrix G-12). The script load-tests telemetry ingestion with valid batches; latencies are low because the service is in-memory SQLite on a loopback connection.
 
 ---
 
