@@ -92,7 +92,18 @@ POST /v1/telemetry/batches  ->  TelemetryIngestionService  --AnomalyObserverPort
 - **Anomaly time is the server clock** at ingestion, so a node with a skewed or hostile timestamp cannot move the correlator's per-node high-water mark.
 - **Correlation never fails ingestion:** an observer error is counted in `incident_correlation_errors_total`.
 - **Tests:** `test/harness/incidents.test.ts` (21, real HTTP server: the 3-batch scenario → exactly one `CRITICAL_COOLING_FAILURE`, duplicates suppressed, no cross-node combination, expiry after 31 s of silence, array stream format, field validation, failure isolation) and `test/integration/story_11_5_*` (domain, 20). Disconnecting the observer makes 5 of the 21 fail.
-- **k6 variant:** `tests/nfr/composite-incident-load.js` (50 VUs; teardown asserts exactly 31 incidents, one per node, from thousands of anomalies). A Node emulation of the same request pattern against the built server gave 14,342 requests, all HTTP 200 and accepted, **31 incidents**, evidence capped at 100 per incident, 42,933 duplicates suppressed. **Hosted result ([run 42654308692](https://github.com/JuanAndresCano/ai-compute-observability-solu2/actions/runs/42654308692), commit `61a8eb1`):** all 3 jobs passed (`verify` 28 s, `e2e` 32 s, `nfr-k6` 57 s, up from 39 s because it now runs both scripts). k6 exits non-zero when any threshold is crossed, so the green job means the incident-storm script met `p(95)<50 ms`, `p(99)<100 ms`, `http_req_failed<1 %` and `incident_dedup_ok rate==1` (exactly 31 incidents, one per node, from thousands of anomalies). Exact values: `TODO: paste the THRESHOLDS / TOTAL RESULTS block of the step "k6 incident-storm variant"` (not copied into this report yet).
+- **k6 variant:** `tests/nfr/composite-incident-load.js` (50 VUs; teardown asserts exactly 31 incidents, one per node, from thousands of anomalies). A Node emulation of the same request pattern against the built server gave 14,342 requests, all HTTP 200 and accepted, **31 incidents**, evidence capped at 100 per incident, 42,933 duplicates suppressed. **Hosted result ([run 42654308692](https://github.com/JuanAndresCano/ai-compute-observability-solu2/actions/runs/42654308692), commit `61a8eb1`):** all 3 jobs passed (`verify` 28 s, `e2e` 32 s, `nfr-k6` 57 s, up from 39 s because it now runs both scripts). k6 exits non-zero when any threshold is crossed, so the green job means the incident-storm script met `p(95)<50 ms`, `p(99)<100 ms`, `http_req_failed<1 %` and `incident_dedup_ok rate==1` (exactly 31 incidents, one per node, from thousands of anomalies). Values copied from the job log:
+
+| Metric (`composite-incident-load.js`, 50 VUs, 16 s) | Target | Measured | Status |
+|---|:---:|:---:|:---:|
+| p95 latency | < 50 ms | **1.38 ms** | PASS |
+| p99 latency | < 100 ms | **1.96 ms** | PASS |
+| Error rate (`http_req_failed`) | < 1 % | **0.00 %** (0 of 12,761) | PASS |
+| `incident_dedup_ok` (exactly 31 incidents, one per node, one type, checked in `teardown`) | rate == 1 | **100 %** (1 of 1) | PASS |
+| Checks `status is 200 or 429`, `event was accepted` | 100 % | **100 %** (25,520 / 25,520) | PASS |
+| Throughput | n/a | 12,761 requests, 797 req/s, 50 VUs | informational |
+
+The first script, re-run in the same job on this commit, gave p95 **1.29 ms**, p99 **1.92 ms**, errors **0.00 %** (0 of 13,617), all 40,851 checks passing (544 req/s): consistent with the earlier run (1.15 ms / 1.78 ms). Latencies are low because the service is in-memory SQLite on a loopback connection; the useful evidence of the second script is the correctness check (31 incidents from ~38,000 anomalies), not the speed.
 
 ### k6 Non-Functional Requirement (NFR) Load Test Summary
 Script: `tests/nfr/composite-alert-load.js` (50 virtual users, 25 s, thresholds `p(95)<50 ms`, `p(99)<100 ms`, error rate `< 1 %`).
