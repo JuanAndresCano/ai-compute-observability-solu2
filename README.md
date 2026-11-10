@@ -103,3 +103,23 @@ Copy [`.env.example`](.env.example) to `.env` or pass variables to your runtime:
   - 125 architectural purity, schema contract, and BDD scaffold tests.
   - 157 acceptance test-driven development (ATDD) contract tests.
 * **Traceability:** 46 matrix rows, 136 test IDs mapped 1:1 to epics, stories, and functional requirements.
+
+## Demo interactiva (Windows PowerShell)
+
+Requisitos: Docker Desktop y Node 20+ con `npm ci` ya ejecutado. Desde la raiz del repositorio:
+
+```powershell
+.\demo-interactiva.ps1
+```
+
+| Opcion | Que hace |
+|---|---|
+| 0 | `docker compose down -v` + build + up, espera `/health` y envia una flota inicial |
+| 1 | Abre el heatmap en `http://localhost:8080/observability/heatmap` |
+| 2 / S | Telemetria normal y tibia (una vez / cada 2 s hasta Ctrl+C) |
+| 3 | `ws-gpu-22` a 91 C (alerta termica, > 88 C) |
+| 4 | Cordon de `ws-gpu-22` via API y feed de auditoria |
+| 5 | Reporte ejecutivo de utilizacion (7 dias) |
+| 6 / 7 / 8 | Playwright + axe, gate de cobertura de ramas, suite Vitest |
+
+`docker-compose.yml` activa `SEED_DEMO_LOGS=true` solo para que el drawer de diagnostico muestre logs de kernel de `ws-gpu-22`. El mapa se actualiza por polling cada 2 s; el WebSocket `/ws/telemetry` existe en el backend pero la vista no lo consume.

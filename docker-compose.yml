@@ -12,6 +12,7 @@ services:
       PORT: 8080
       DB_PATH: ":memory:"
       LOG_LEVEL: info
+      SEED_DEMO_LOGS: "true"   # demo: precarga logs de kernel de ws-gpu-22 para el drawer de diagnostico
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
       interval: 10s
